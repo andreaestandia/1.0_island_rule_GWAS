@@ -1,0 +1,824 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r}
+mart = useEnsembl('ENSEMBL_MART_ENSEMBL')
+#listDatasets(mart)
+
+#Get zebrafinch gene list from ensembl biomarts
+ensembl <-
+  useEnsembl(biomart = "ensembl", dataset = "tguttata_gene_ensembl")
+```
+
+```{r}
+LRTs <- list()
+for (Phenotype in c("head",
+                    "body_pc1",
+                    "body_pc2",
+                    "tarsus",
+                    "tail",
+                    "wing",
+                    "bill_pc1",
+                    "bill_pc2")) {
+  LRTs[[as.character(Phenotype)]] <-
+    read.delim(gzfile(file.path(
+      data_path,
+      paste0("gwas_output/",
+             Phenotype,
+             "_gwas_out.lrt0.gz")
+    )))  %>%
+    filter(as.numeric(LRT) > 0) %>%
+    mutate(Chromosome = str_replace(Chromosome, "chr", ""))
+}
+
+LRTs <- read.delim(gzfile("/home/zoo/sjoh4959/bill_pc1_gwas_out_wholegenome.lrt0.gz")) %>% filter(as.numeric(LRT) > 0)%>%
+    mutate(Chromosome = str_replace(Chromosome, "chr", ""))
+```
+
+Pull out SNPs with the top 0.01% of LRT values
+```{r}
+n <- 0.001
+outlier_SNPs <- LRTs[LRTs$LRT > quantile(LRTs$LRT, prob=1-n/100),]
+
+add_lrt <- function(x) {
+  x[x$LRT > quantile(x$LRT, prob = 1 - n / 100), ]
+}
+
+outlier_SNPs <- lapply(LRTs, add_lrt)
+```
+
+Which genes are mapped by SNPs with top 0.01% of LRT values?
+```{r}
+LRTs_outliers <- list()
+for (phenotype in LRTs) {
+  phenotype$gene_id <- NA
+  phenotype$gene_name <- NA
+  for (ROW in 1:nrow(phenotype)) {
+    print(paste0("Processing SNP ", ROW))
+    Genes_within_range <-
+      getBM(
+        attributes = c(
+          'ensembl_gene_id',
+          'external_gene_name',
+          'chromosome_name',
+          'start_position',
+          'end_position',
+          'gene_biotype'
+        ),
+        mart = ensembl,
+        useCache = FALSE,
+        filter = c('chromosome_name', 'start', 'end'),
+        values = list(
+          phenotype$Chromosome[ROW],
+          phenotype$Position[ROW],
+          phenotype$Position[ROW]
+        )
+      )
+    if (nrow(Genes_within_range) > 0) {
+      Unique_protein_coding <-
+        Genes_within_range %>% 
+        filter(gene_biotype == "protein_coding") %>%
+        dplyr::select(external_gene_name, ensembl_gene_id) %>% 
+        unique()
+      
+      if (nrow(Unique_protein_coding) > 0) {
+        phenotype$gene_id[ROW] <- Unique_protein_coding$ensembl_gene_id
+        phenotype$gene_name[ROW] <-
+          Unique_protein_coding$external_gene_name
+      }
+    }
+  }
+}
+
+outlier_SNPs$gene_id <- NA
+outlier_SNPs$gene_name <- NA
+for (ROW in 1:nrow(outlier_SNPs)) {
+    print(paste0("Processing SNP ", ROW))
+    Genes_within_range <-
+      getBM(
+        attributes = c(
+          'ensembl_gene_id',
+          'external_gene_name',
+          'chromosome_name',
+          'start_position',
+          'end_position',
+          'gene_biotype'
+        ),
+        mart = ensembl,
+        useCache = FALSE,
+        filter = c('chromosome_name', 'start', 'end'),
+        values = list(
+          outlier_SNPs$Chromosome[ROW],
+          outlier_SNPs$Position[ROW],
+          outlier_SNPs$Position[ROW]
+        )
+      )
+    if (nrow(Genes_within_range) > 0) {
+      Unique_protein_coding <-
+        Genes_within_range %>% 
+        filter(gene_biotype == "protein_coding") %>%
+        dplyr::select(external_gene_name, ensembl_gene_id) %>% 
+        unique()
+      
+      if (nrow(Unique_protein_coding) > 0) {
+        outlier_SNPs$gene_id[ROW] <- Unique_protein_coding$ensembl_gene_id
+        outlier_SNPs$gene_name[ROW] <-
+          Unique_protein_coding$external_gene_name
+      }
+    }
+  }
+```
+
+Save outlier list and check we can load it again
+```{r}
+for (sublist in 1:length(LRTs)) {
+  write.xlsx(
+    LRTs[sublist],
+    file = file.path(getwd(), paste0(
+      "reports/outliers_", as.character(sublist), "_0.01.xlsx"
+    )),
+    sheetName = paste(sublist),
+    row.names = FALSE,
+    append = T
+  )
+}
+```
+
+```{r}
+max_distance_between_outliers = 25000
+min_clustered_outliers = 2
+
+#Set minimum number of outliers required to be considered a cluster
+
+#Create empty tible
+clustered_outlier_SNPs <-
+  tibble(
+    Chromosome = character(),
+    Position = numeric(),
+    Major = character(),
+    Minor = character(),
+    Frequency = numeric(),
+    N = integer(),
+    LRT = numeric(),
+    high_WT.HE.HO = character(),
+    n = integer()
+  )
+
+#For each chromosome find outlier clusters if any.
+for (CHROM in unique(LRTs$Chromosome)) {
+  CHROM_outlier_SNPs <- filter(outlier_SNPs, Chromosome == CHROM)
+  
+  current_windows <- CHROM_outlier_SNPs  %>%
+    mutate(
+      ahead_Position = Position - lag(Position),
+      behind_Position = abs(Position - lead(Position))
+    ) %>%
+    mutate(min_dist = pmin(ahead_Position, behind_Position, na.rm = T)) %>%
+    filter(min_dist < max_distance_between_outliers) %>%
+    select(-ahead_Position, -behind_Position, -min_dist)
+  windows <- current_windows %>% pull(n)
+  
+  if (nrow(current_windows) > 2) {
+    clustered_outlier_SNPs <-
+      rbind(clustered_outlier_SNPs, current_windows)
+  }
+  
+  rm(CHROM_outlier_SNPs, current_windows)
+}
+
+
+clustered_outlier_SNPs$GeneID_Gene_Name <-
+  paste0(clustered_outlier_SNPs$gene_id,
+         ": ",
+         clustered_outlier_SNPs$gene_name)
+
+
+#################################################################################################################################
+# Save clustered "outlier" list
+#################################################################################################################################
+
+write.table(
+  clustered_outlier_SNPs,
+  paste0(
+    "ANGSD_Association_",
+    Phenotype,
+    "/",
+    Phenotype,
+    "_clustered_top0.01percent.txt"
+  ),
+  row.names = FALSE,
+  quote = FALSE,
+  sep = "\t"
+)
+
+
+#################################################################################################################################
+# Plot Genome-wide LRT scores
+#################################################################################################################################
+
+#For each chromosome find centre in n - used to add x axis labels
+axisdf <-
+  LRTs %>% group_by(Chromosome) %>% summarize(center = (max(n) + min(n)) / 2)
+
+pdf(
+  file = file.path(
+    getwd(),
+    "reports/plots/ANGSD_Association_body_pc1_top0.01percent.pdf"
+  ),
+  height = 6,
+  width = 10
+)
+
+  ggplot(LRTs, aes(
+    x = n,
+    y = LRT,
+    color = as.factor(Chromosome)
+  )) +
+  
+  
+  # Show all points
+  geom_point(size = 0.75) +
+  scale_color_manual(values = rep(c("#242565", "#46557E"), 26)) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  scale_x_continuous(
+    label = axisdf$Chromosome,
+    breaks = axisdf$center ,
+    expand = c(0.01, 0.01)
+  ) +
+  labs(x = "Chromosome") +
+  theme_classic() +
+  theme(legend.position = "none", panel.border = element_blank())
+
+
+WholeGenome <-
+  ggplot(LRTs, aes(
+    x = n,
+    y = LRT,
+    color = as.factor(Chromosome)
+  )) +
+  
+  
+  # Show all points
+  geom_point(size = 0.75) +
+  scale_color_manual(values = rep(c("#242565", "#46557E"), 26)) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  geom_point(data = clustered_outlier_SNPs,
+              colour = "#F71927",
+              size = 0.75) + 
+
+   # custom X axis: -->
+  scale_x_continuous(
+    label = axisdf$Chromosome,
+    breaks = axisdf$center ,
+    expand = c(0.01, 0.01)
+  ) +
+   #scale_y_continuous(limits = c(0,0.31), expand = c(0.01, 0.01) ) +     # remove space between plot area and x axis -->
+  labs(x = "Chromosome") +
+  theme_classic() +
+  theme(legend.position = "none", panel.border = element_blank())
+print(WholeGenome)
+
+dev.off()
+
+
+```
+
+
+#################################################################################################################################
+# Are the top 0.01% SNPs clustered within chromosomes?
+#################################################################################################################################
+
+#Set the max distance in bp for "outliers" to be deemed clustered.
+max_distance_between_outliers = 25000
+min_clustered_outliers = 2
+
+#Set minimum number of outliers required to be considered a cluster
+
+#Create empty tible
+clustered_outlier_SNPs <-
+  tibble(
+    Chromosome = character(),
+    Position = numeric(),
+    Major = character(),
+    Minor = character(),
+    Frequency = numeric(),
+    N = integer(),
+    LRT = numeric(),
+    high_WT.HE.HO = character(),
+    n = integer()
+  )
+
+#For each chromosome find outlier clusters if any.
+for (CHROM in unique(LRTs$Chromosome)) {
+  CHROM_outlier_SNPs <- filter(outlier_SNPs, Chromosome == CHROM)
+  
+  current_windows <- CHROM_outlier_SNPs  %>%
+    mutate(
+      ahead_Position = Position - lag(Position),
+      behind_Position = abs(Position - lead(Position))
+    ) %>%
+    mutate(min_dist = pmin(ahead_Position, behind_Position, na.rm = T)) %>%
+    filter(min_dist < max_distance_between_outliers) %>%
+    select(-ahead_Position, -behind_Position, -min_dist)
+  windows <- current_windows %>% pull(n)
+  
+  if (nrow(current_windows) > 2) {
+    clustered_outlier_SNPs <-
+      rbind(clustered_outlier_SNPs, current_windows)
+  }
+  
+  rm(CHROM_outlier_SNPs, current_windows)
+}
+
+
+clustered_outlier_SNPs$GeneID_Gene_Name <-
+  paste0(clustered_outlier_SNPs$gene_id,
+         ": ",
+         clustered_outlier_SNPs$gene_name)
+
+
+#################################################################################################################################
+# Save clustered "outlier" list
+#################################################################################################################################
+
+write.table(
+  clustered_outlier_SNPs,
+  paste0(
+    "ANGSD_Association_",
+    Phenotype,
+    "/",
+    Phenotype,
+    "_clustered_top0.01percent.txt"
+  ),
+  row.names = FALSE,
+  quote = FALSE,
+  sep = "\t"
+)
+
+
+#################################################################################################################################
+# Plot Genome-wide LRT scores
+#################################################################################################################################
+
+#For each chromosome find centre in n - used to add x axis labels
+axisdf <-
+  LRTs %>% group_by(Chromosome) %>% summarize(center = (max(n) + min(n)) / 2)
+
+pdf(
+  file = file.path(
+    getwd(),
+    "reports/plots/ANGSD_Association_body_pc1_top0.01percent.pdf"
+  ),
+  height = 6,
+  width = 10
+)
+```{r}
+  ggplot(LRTs, aes(
+    x = n,
+    y = LRT,
+    color = as.factor(Chromosome)
+  )) +
+  
+  
+  # Show all points
+  geom_point(size = 0.75) +
+  scale_color_manual(values = rep(c("#242565", "#46557E"), 26)) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  scale_x_continuous(
+    label = axisdf$Chromosome,
+    breaks = axisdf$center ,
+    expand = c(0.01, 0.01)
+  ) +
+  labs(x = "Chromosome") +
+  theme_classic() +
+  theme(legend.position = "none", panel.border = element_blank())
+```
+
+WholeGenome <-
+  ggplot(LRTs, aes(
+    x = n,
+    y = LRT,
+    color = as.factor(Chromosome)
+  )) +
+  
+  
+  # Show all points
+  geom_point(size = 0.75) +
+  scale_color_manual(values = rep(c("#242565", "#46557E"), 26)) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  <!-- geom_point(data = clustered_outlier_SNPs, -->
+  <!--            colour = "#F71927", -->
+  <!--            size = 0.75) + -->
+
+  <!-- # custom X axis: -->
+  scale_x_continuous(
+    label = axisdf$Chromosome,
+    breaks = axisdf$center ,
+    expand = c(0.01, 0.01)
+  ) +
+  <!-- #scale_y_continuous(limits = c(0,0.31), expand = c(0.01, 0.01) ) +     # remove space between plot area and x axis -->
+  labs(x = "Chromosome") +
+  
+  <!-- # Custom the theme: -->
+  theme_classic() +
+  theme(legend.position = "none", panel.border = element_blank())
+print(WholeGenome)
+
+dev.off()
+
+
+}
+
+
+
+
+
+#################################################################################################################################
+# Create Chr15 plot
+#################################################################################################################################
+
+Chr_15_snpEff <-
+  read.delim("ANGSD_Association_BodyLength/snpEff_predictions/Effects_per_variant.txt") %>% select(POS, ANN....EFFECT, ANN....IMPACT, ANN....GENE)
+colnames(Chr_15_snpEff) <- c("Position", "Effect", "Impact", "Gene")
+Chr_15_snpEff$PositionMb <- Chr_15_snpEff$Position / 1000000
+
+Chr15_LRTs <- filter(LRTs, Chromosome == 15)
+Chr15_LRTs$PositionMb <- Chr15_LRTs$Position / 1000000
+Chr15_outlier_SNPs <- filter(outlier_SNPs, Chromosome == 15)
+Chr15_outlier_SNPs$PositionMb <- Chr15_outlier_SNPs$Position / 1000000
+Chr15_clustered_outlier_SNPs <-
+  filter(clustered_outlier_SNPs, Chromosome == 15)
+Chr15_clustered_outlier_SNPs$PositionMb <-
+  Chr15_clustered_outlier_SNPs$Position / 1000000
+Top5_Chr15_outlier_SNPs <-
+  Chr15_outlier_SNPs[order(-Chr15_outlier_SNPs$LRT), ][1:10, ]
+
+#Automatically determine optimum number of clusters?
+library(factoextra)
+P0 <-
+  fviz_nbclust(
+    as.matrix(Chr15_clustered_outlier_SNPs$PositionMb),
+    kmeans,
+    method = "silhouette",
+    nboot = 10000,
+    k.max = 10
+  )
+K <- as.numeric(P0$data$clusters[which.max(P0$data$y)])
+
+#Or set manually?
+K <- 4
+
+#Run kmeans clustering using optimum K
+# use kmeans a first time to get the centers
+centers <-
+  kmeans(Chr15_clustered_outlier_SNPs$PositionMb, centers = K)$centers
+
+# order the centers
+centers <- sort(centers)
+
+# call kmeans again but this time passing the centers calculated in the previous step
+Chr15_clustered_outlier_SNPs$clusterID <-
+  as.factor(kmeans(Chr15_clustered_outlier_SNPs$PositionMb, centers = centers)$cluster)
+write.table(
+  Chr15_clustered_outlier_SNPs,
+  "ANGSD_Association_BodyLength/Chr15_clustered_outliers.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE
+)
+
+#Reload (which candidate annotations added)
+Chr15_candidates <-
+  read.delim("ANGSD_Association_BodyLength/Chr15_clustered_outliers_candidates.txt") %>%
+  filter(Candidate == "Y")
+Chr15_candidates$Position <- Chr15_candidates$Position * 1000000
+
+Chr15_candidates <- Chr_15_snpEff %>% right_join(Chr15_candidates)
+
+#Reload (which candidate annotations added)
+TSHR_outliers <-
+  Chr15_candidates %>% filter(gene_name == "tshr") %>% select(Chromosome, Position)
+TSHR_outliers$Position <- TSHR_outliers$Position * 1000000
+write.table(
+  TSHR_outliers,
+  "TSHR_outliers.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE
+)
+
+#For each cluster find central position - used to add cluster labels
+clusterMid = Chr15_clustered_outlier_SNPs %>% group_by(clusterID) %>%
+  summarize(
+    center = (max(Position) + min(Position)) / 2 ,
+    ypos = max(LRT) + 5,
+    ypos2 = 5
+  )
+
+col3 <- c("#6AAB9C", "#E06C78", "#5874DC")
+
+Chr15 <-
+  ggplot(Chr15_LRTs, aes(x = PositionMb, y = LRT, colour = clusterID)) +
+  geom_point(colour = "#242565", size = 1) +
+  geom_point(
+    data = Chr15_clustered_outlier_SNPs,
+    inherit.aes = FALSE,
+    aes(x = PositionMb, y = LRT),
+    colour = "#F71927",
+    size = 1
+  ) +
+  geom_text(
+    data = clusterMid,
+    inherit.aes = FALSE,
+    aes(x = center, y = ypos2, label = clusterID),
+    size = 3,
+    colour = "white"
+  ) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  geom_label_repel(
+    data = Chr15_candidates,
+    aes(label = Gene, fill = Effect),
+    force = 15,
+    nudge_y = 0,
+    size = 2.5,
+    na.rm = TRUE,
+    max.overlaps = 35,
+    ylim = c(25, max(LRTs$LRT + 2)),
+    segment.colour = "black",
+    fontface = 'bold',
+    color = 'white',
+    alpha = 0.75
+  ) +
+  labs(x = "Chr15 (Mb)") +
+  scale_y_continuous(limits = c(0, max(LRTs$LRT + 2))) +
+  scale_x_continuous(limits = c(0, 15)) +
+  #scale_colour_manual(aesthetics = c("fill"),
+  #                    values = c("intron_variant" = "#6AAB9C",
+  #                               "missense_variant" = "#E06C78",
+  #                               "5_prime_UTR_variant" = "#5874DC",
+  #                               "missense_variant&splice_region_variant" = "#6AAB9C",
+  #                               "splice_region_variant&intron_variant" = "#5874DC",
+  #                               "synonymous_variant" = "#5874DC"),
+  #                    drop = FALSE) +
+  theme_classic() +
+  theme(legend.title = element_blank())
+
+
+#################################################################################################################################
+# Create Chr17 plot
+#################################################################################################################################
+
+#Load LRTs
+Chr17_LRTs <- filter(LRTs, Chromosome == 17)
+Chr17_LRTs$PositionMb <- Chr17_LRTs$Position / 1000000
+
+#Extract chr17 outliers
+Chr17_outlier_SNPs <- filter(outlier_SNPs, Chromosome == 17)
+Chr17_outlier_SNPs$PositionMb <- Chr17_outlier_SNPs$Position / 1000000
+
+
+Chr17_clustered_outlier_SNPs <-
+  filter(clustered_outlier_SNPs, Chromosome == 17)
+Chr17_clustered_outlier_SNPs$PositionMb <-
+  Chr17_clustered_outlier_SNPs$Position / 1000000
+Top5_Chr17_outlier_SNPs <-
+  Chr17_outlier_SNPs[order(-Chr17_outlier_SNPs$LRT), ][1:10, ]
+
+Chr_17_snpEff <-
+  read.delim("ANGSD_Association_BodyLength/snpEff_predictions/Chr17_variant_effects.txt") %>% select(POS, ANN....EFFECT, ANN....IMPACT, ANN....GENE)
+colnames(Chr_17_snpEff) <- c("Position", "Effect", "Impact", "Gene")
+Chr_17_snpEff$PositionMb <- Chr_17_snpEff$Position / 1000000
+
+#Set cluster ID
+Chr17_clustered_outlier_SNPs$clusterID <- as.factor("5")
+write.table(
+  Chr17_clustered_outlier_SNPs,
+  "ANGSD_Association_BodyLength/Chr17_clustered_outliers.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE
+)
+
+#Reload (which candidate annotations added)
+Chr17_candidates <-
+  read.delim("ANGSD_Association_BodyLength/Chr17_clustered_outliers_candidates.txt") %>%
+  filter(Candidate == "Y")
+Chr17_candidates$Position <- Chr17_candidates$Position * 1000000
+Chr17_candidates <- Chr_17_snpEff %>% right_join(Chr17_candidates)
+
+#For each cluster find central position - used to add cluster labels
+Chr17_clusterMid = Chr17_clustered_outlier_SNPs %>% group_by(clusterID) %>%
+  summarize(
+    center = (max(Position) + min(Position)) / 2 ,
+    ypos = max(LRT) + 5,
+    ypos2 = 5
+  )
+
+Chr17 <- ggplot(Chr17_LRTs, aes(x = PositionMb, y = LRT)) +
+  geom_rect(
+    xmin = 25.8,
+    xmax = 27.5,
+    ymin = 0,
+    ymax = max(Chr17_LRTs$LRT + 2),
+    fill = "#E8D7E6"
+  ) +
+  geom_point(colour = "#242565", size = 1) +
+  geom_point(
+    data = Chr17_clustered_outlier_SNPs,
+    inherit.aes = FALSE,
+    aes(x = PositionMb, y = LRT),
+    colour = "#F71927",
+    size = 1
+  ) +
+  geom_text(
+    data = Chr17_clusterMid,
+    inherit.aes = FALSE,
+    aes(x = center, y = ypos2, label = clusterID),
+    size = 3,
+    colour = "white"
+  ) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  geom_label_repel(
+    data = Chr17_candidates,
+    aes(label = Gene, fill = Effect),
+    force = 15,
+    nudge_y = 1,
+    nudge_x = -2,
+    size = 2.5,
+    na.rm = TRUE,
+    max.overlaps = 35,
+    ylim = c(25, max(LRTs$LRT + 2)),
+    segment.colour = "black",
+    fontface = 'bold',
+    color = 'white',
+    alpha = 0.75
+  ) +
+  labs(x = "Chr17 (Mb)") +
+  scale_y_continuous(limits = c(0, max(LRTs$LRT + 2))) +
+  scale_x_continuous(limits = c(22, max(Chr17_LRTs$PositionMb))) +
+  #scale_colour_manual(aesthetics = c("fill"),
+  #                    values = c("intron_variant" = "#6AAB9C",
+  #                               "missense_variant" = "#E06C78",
+  #                               "5_prime_UTR_variant" = "#5874DC",
+  #                               "missense_variant&splice_region_variant" = "#6AAB9C",
+  #                               "splice_region_variant&intron_variant" = "#5874DC",
+  #                               "synonymous_variant" = "#5874DC"),
+  #                    drop = FALSE) +
+  scale_fill_discrete(drop = FALSE) +
+  theme_classic()
+
+#################################################################################################################################
+#
+#################################################################################################################################
+
+Chr15_Chr17_candidates <- rbind(Chr15_candidates, Chr17_candidates)
+
+#################################################################################################################################
+# Create whole genome plot
+#################################################################################################################################
+
+WholeGenome <-
+  ggplot(LRTs, aes(
+    x = n,
+    y = LRT,
+    color = as.factor(Chromosome)
+  )) +
+  
+  # Show all points
+  geom_point(size = 0.75) +
+  scale_color_manual(values = rep(c("#242565", "#46557E"), 26)) +
+  geom_hline(
+    yintercept = min(outlier_SNPs$LRT),
+    linetype = "dashed",
+    colour = "grey37"
+  ) +
+  geom_point(data = clustered_outlier_SNPs,
+             colour = "#F71927",
+             size = 0.75) +
+  
+  # custom X axis:
+  scale_x_continuous(
+    label = axisdf$Chromosome,
+    breaks = axisdf$center ,
+    expand = c(0.01, 0.01)
+  ) +
+  #scale_y_continuous(limits = c(0,0.31), expand = c(0.01, 0.01) ) +     # remove space between plot area and x axis
+  labs(x = "Chromosome") +
+  
+  # Custom the theme:
+  theme_classic() +
+  theme(legend.position = "none", panel.border = element_blank())
+
+
+#################################################################################################################################
+# Save plot
+#################################################################################################################################
+
+pdf(
+  file = paste0("Plots/", "GWAS_", Phenotype, ".pdf"),
+  height = 5,
+  width = 10
+)
+library(ggpubr)
+ggarrange(
+  WholeGenome,
+  ggarrange(
+    Chr15,
+    Chr17,
+    ncol = 2,
+    labels = c("B", "C"),
+    common.legend = TRUE
+  ),
+  nrow = 2,
+  labels = "A"
+)
+dev.off()
+
+
+#################################################################################################################################
+# Create list of outlier SNPs within each cluster for subsequent analyses
+#################################################################################################################################
+
+Cluster1_SNPs <-
+  filter(Chr15_clustered_outlier_SNPs, clusterID == 1) %>%
+  mutate(beaglepos = paste(Chromosome, Position, sep = "_")) %>% select(beaglepos)
+Cluster2_SNPs <-
+  filter(Chr15_clustered_outlier_SNPs, clusterID == 2) %>% 
+  mutate(beaglepos = paste(Chromosome, Position, sep = "_")) %>% select(beaglepos)
+Cluster3_SNPs <-
+  filter(Chr15_clustered_outlier_SNPs, clusterID == 3) %>% 
+  mutate(beaglepos = paste(Chromosome, Position, sep = "_")) %>% select(beaglepos)
+Cluster4_SNPs <-
+  filter(Chr15_clustered_outlier_SNPs, clusterID == 4) %>% 
+  mutate(beaglepos = paste(Chromosome, Position, sep = "_")) %>% select(beaglepos)
+Cluster5_SNPs <-
+  filter(Chr17_clustered_outlier_SNPs, clusterID == 5) %>% 
+  mutate(beaglepos = paste(Chromosome, Position, sep = "_")) %>% select(beaglepos)
+
+write.table(
+  Cluster1_SNPs,
+  "ANGSD_Association_BodyLength/Cluster1_SNPs.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE
+)
+write.table(
+  Cluster2_SNPs,
+  "ANGSD_Association_BodyLength/Cluster2_SNPs.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE
+)
+write.table(
+  Cluster3_SNPs,
+  "ANGSD_Association_BodyLength/Cluster3_SNPs.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE
+)
+write.table(
+  Cluster4_SNPs,
+  "ANGSD_Association_BodyLength/Cluster4_SNPs.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE
+)
+write.table(
+  Cluster5_SNPs,
+  "ANGSD_Association_BodyLength/Cluster5_SNPs.txt",
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE
+)

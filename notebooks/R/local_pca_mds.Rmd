@@ -1,0 +1,227 @@
+---
+title: "local_pca_mds.Rmd"
+author: "Andrea Estandia"
+date: "17/10/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+argv <- commandArgs(T)
+window_size<-as.numeric(argv[1])
+N_ind<-as.numeric(argv[2])
+N_PC<-as.numeric(argv[3])
+N_MDS<-as.numeric(argv[4])
+chr<-scan(text=args[5], sep=",")
+
+```{r}
+
+big_data <- read.table(file.path(reports_path,"localPCA/big_data/chr1-30Z4A1A_localpca.csv"), header=T)
+chr30 <- big_data %>% filter(LG=="chr30")
+
+window_size=100
+N_ind=377
+N_PC=2
+N_MDS=20
+chr="chr1A"
+
+mds_by_chr <- function(chr){
+  
+  window<- as.data.frame(list.files(file.path(reports_path, paste0("localPCA/cov_by_window/",chr))))
+  
+  colnames(window) <- "file_name"
+  
+  window$LG<-vector(length=dim(window)[1])
+  window$pos<-vector(length=dim(window)[1])
+  window$n_snp<-vector(length=dim(window)[1])
+  window$start<-vector(length=dim(window)[1])
+  window$stop<-vector(length=dim(window)[1])
+  
+  window_order<-window[order(window$LG, window$start),]
+  head(window_order)
+  
+  for (i in 1 :dim(window)[1] )
+  {
+    window$LG[i]<-unlist(strsplit(as.character(window$file_name[i]), split="_"))[2]
+    window$pos[i]<-unlist(strsplit(as.character(window$file_name[i]), split="_"))[3]
+    window$n_snp[i]<-as.numeric(unlist(strsplit(as.character(window$file_name[i]), split="_"))[4])
+    window$start[i]<-as.numeric(unlist(strsplit(as.character(window$pos[i]), split="-"))[1])
+    window$stop[i]<-as.numeric(unlist(strsplit(as.character(window$pos[i]), split="-"))[2])
+  }
+  #re-order the window correctly
+  window_order<-window[order(window$LG, window$start),]
+  head(window_order)
+  
+  ####work on all LG to run lostruct
+  
+  
+  #prepare an empty matrix with nrow= nb of window, and ncol= sumofsquares + nb of eigen value + dim of all eigen vectors (Nb individuals * N_Pc)
+  window_eigs<-matrix(nrow=dim(window_order)[1], ncol= (1+N_PC+ (N_ind*N_PC)))
+  
+  #import each covariance matrix and make the eigen decomposition
+  for (i in 1: dim(window_order)[1])
+  {
+    print(paste("import covariance matrix for window and get eigenvectors",i))
+    window_covmats_i<-as.matrix(read.table(file.path(reports_path, paste0("localPCA/cov_by_window/",chr,"/",window_order$file_name[i]))))
+    window_eigs [i,]<- cov_pca(k=N_PC, covmat=window_covmats_i)
+  }
+  
+  print(paste("calculating distance between window PCA with NPC=",N_PC))
+  window_dist<- pc_dist(window_eigs, npc=N_PC)
+  
+  #run a MDS to visualise the distribution of window
+  print(paste("run MDS on distance matrix and will keep N_MDS=",N_MDS))
+  mds_axe<-cmdscale(window_dist, eig=TRUE, k=N_MDS)
+  window_order_mds<-cbind(window_order, mds_axe$points)
+  
+  window_order_mds <- window_order_mds %>% rename("PC1"="1")
+  window_order_mds$n <- 1:nrow(window_order_mds)
+  window_order_mds
+}
+
+chromosome_list <- paste0("chr", as.character(seq(from = 20, to = 29)))
+
+datalist = list()
+for (chromo in chromosome_list) {
+  datalist[[as.character(chromo)]] <- mds_by_chr(chromo)
+}
+
+big_data <- 
+  do.call(rbind, datalist)
+
+big_data$n <- 1:nrow(big_data)
+
+axisdf <-
+  big_data %>%
+  group_by(LG) %>%
+  summarize(center = (max(n) + min(n)) / 2)
+
+png(
+  file = file.path(reports_path, "localPCA/plots/local_pca_chr4A.png"),height = 12, width = 35, units="cm",res = 300
+)
+
+big_data %>%
+  ggplot(aes(x=n, y=PC1, color=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values=rep(c("#348544", "#69bf5a"), length(unique(big_data$LG))))+
+  labs(x = "\nChromosome") +
+  geom_hline(yintercept=sd(big_data$PC1)*4, linetype="dashed")+
+  geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12, family="ubuntu"),
+    legend.position = "none", 
+    panel.border = element_blank()
+  )
+
+dev.off()
+```
+
+```{r}
+list_outliers <- big_data %>% filter(PC1 < -0.3) %>% dplyr::select(file_name)
+t <- read.table(file.path(reports_path, paste0("localPCA/cov_by_window/chr4A/window_chr4A_8824118-8841983_100_snps.beagle.gz.cov")))
+label <- read.table(file.path(data_path,"localPCA/pop_label"))
+colnames(t) <- label$V1
+png(file=file.path(reports_path, paste0("localPCA/plots/pca_chr4A_2.png")),height = 12, width = 35, units="cm",res = 300)
+heatmap(as.matrix(t),symm=T)
+dev.off()
+```
+
+Read PCA with only inversion section
+```{r}
+cov_mat <- as.matrix(read.table(file.path(reports_path, paste0("localPCA/chr30_inversion/inversions_chr30_pca_out.cov"))))
+
+pheno <- read_csv("/home/zoo/sjoh4959/Documents/projects/0.0_island_rule/data/raw/phenotypes_gwas.csv")
+
+pca<-eigen(cov_mat)
+
+pca.mat<-as.matrix(pca$vectors %*% (diag(pca$values))^0.5)
+
+nPC<-dim(pca$vectors)[2]
+col_PC<-vector(length=nPC)
+for (i in 1 : nPC) {col_PC[i]<-paste0("PC",i)}
+colnames(pca.mat)<-c(col_PC)
+
+rownames(pca.mat)<-label$V3
+
+var1<-round(pca$values[1]*100/sum(pca$values[pca$values>=0]),2)
+var2<-round(pca$values[2]*100/sum(pca$values[pca$values>=0]),2)
+var3<-round(pca$values[3]*100/sum(pca$values[pca$values>=0]),2)
+var4<-round(pca$values[4]*100/sum(pca$values[pca$values>=0]),2)
+
+pca.mat <- as.data.frame(pca.mat)
+pca.mat$pop <- label$V3
+pca.mat$sample_name <- label$V1
+
+pca.out <- pca.mat[,c(1:4)]
+
+pca.out <- cbind(label, pca.out)
+
+pca.out <- pca.out %>% rename(sample_name=V1)
+
+pca.out <- pheno %>% left_join(pca.out, by="sample_name")
+
+pca.out %>% 
+  filter(PC1< -1 | PC1> -0.5) %>% 
+  ggplot(aes(x=PC1, y=PC2, col=V4))+
+  geom_point()+
+  scale_colour_manual(values=c("#4483a2", "#e38440"))+
+  theme_minimal() +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size, family = "ubuntu"),
+    axis.text.y = element_text(size = text_size, family="ubuntu"),
+    axis.title = element_text(size = text_size, family="ubuntu"),
+    #axis.title.x = element_blank(),
+    legend.position = "right",
+    legend.text = element_text(family="ubuntu", size=11),
+    legend.title = element_text(family="ubuntu"))+
+  labs(x="\nPC1", y="PC2\n", title="Inversion in Chromosome 30", family="ubuntu")
+  
+
+first+intermediate+second+plot_layout(guides = "collect")+plot_annotation(
+  title = 'PCA for clusters in Chr4A')
+```
+
+
+```{r}
+pca.out2 <- read_csv("/media/sjoh4959/My Passport/Andrea/projects/1.0_island_rule_GWAS/pca.out.csv") %>% filter(!grepl(" ", Latitude) |!grepl(" ", Longitude)) %>% 
+  filter(Latitude != "NA" | Longitude != "NA")
+
+oceania <-
+  ne_countries(scale = "large",
+               returnclass = "sf",
+               continent = "oceania")
+
+
+  ggplot(data=pca.out2,aes(x = Longitude, y = Latitude, col=group)) +
+  geom_point(
+    size = 3,
+    alpha = 0.8
+  ) +
+  coord_sf(xlim = c(140, 185),
+           ylim = c(-52,-12),
+           expand = FALSE)
+
+
+
+```
+

@@ -1,0 +1,1 @@
+nohup ~/sjoh4959/projects/0.0_island_rule/src/others/busco/bin/busco -i /data/Users/Andrea/silvereye/ref_genome/ref_genome_chr.fasta -l /data/Users/Andrea/silvereye/annotation/aves_busco_database/aves_odb10/ -m genome --config ~/sjoh4959/projects/0.0_island_rule/src/others/busco/config/config.ini -r --cpu 60 &

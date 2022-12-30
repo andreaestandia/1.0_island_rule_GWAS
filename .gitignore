@@ -1,0 +1,11 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+/data/
+/reports/
+/analysis/annotation/blat/zosterops_*
+/analysis/annotation/repeatmasker/
+/renv/
+/src/others/renv/
+

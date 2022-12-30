@@ -1,0 +1,202 @@
+---
+title: "0.0_plot_map_pheno_chart"
+author: "Andrea Estandia"
+date: "10/12/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r}
+source("./src/0.0_island_rule_source.R")
+```
+
+```{r}
+df <- 
+  read_csv(file.path(data_path, "phenotypes/phenotypes_plot.csv"))
+
+magma_pal <- 
+  c(viridis::magma(n = length(unique(df$subspecies))))
+```
+
+```{r}
+body_pca <-
+  princomp(~Wing+
+             Tarsus+
+             Tail+
+             HeadLength,
+           data=df,
+           scores=TRUE,
+           cor=TRUE,
+           na.action=na.exclude)
+
+colnames(body_pca$scores) <- 
+  c("body_PC1", "body_PC2", "body_PC3", "body_PC4")
+
+bill_pca <-
+  princomp(~Bill_length_posterior+
+             Bill_depth_anterior+
+             Bill_width_anterior,
+           data=df,
+           scores=TRUE,
+           cor=TRUE,
+           na.action=na.exclude)
+
+colnames(bill_pca$scores) <- 
+  c("bill_PC1", "bill_PC2", "bill_PC3")
+
+df <- 
+  cbind(df,body_pca$scores) %>% 
+  cbind(bill_pca$scores)
+```
+
+```{r}
+tarsus_genotype <- read_csv(file.path(reports_path, "GWAS/outliers/bb_tarsus.csv")) %>%  
+  filter(genotype>0.34) %>% 
+  dplyr::select(sample_name, geno) %>% 
+  rename(id=sample_name) %>% 
+  rename(geno_tarsus=geno) 
+
+bill_genotype <- read_csv(file.path(reports_path, "GWAS/outliers/bb_bill.csv")) %>% 
+  filter(genotype>0.34) %>% 
+  dplyr::select(sample_name, geno) %>% 
+  rename(id=sample_name)%>% 
+  rename(geno_bill=geno)
+
+df <- 
+  df %>% 
+  left_join(tarsus_genotype, by ="id") %>% 
+  left_join(bill_genotype, by ="id")
+```
+
+```{r}
+body_plot <- df %>%
+  drop_na(body_PC1) %>% 
+  mutate(pop=gsub("_", " ", pop)) %>%
+  ggplot(aes(y = body_PC1,
+             x = factor(pop, levels=c("Mainland",
+                                            "Tasmania",
+                                            "French Polynesia",
+                                            "New Zealand",
+                                            "Chatham",
+                                            "Norfolk Island",
+                                            "Heron Island",
+                                            "Lord Howe Island",
+                                            "Grand Terre",
+                                            "Lifou",
+                                            "Mare",
+                                            "Ouvea",
+                                            "Tanna",
+                                            "Efate",
+                                            "Santo",
+                                            "Malekula",
+                                            "Pentecost",
+                                            "Ambrym",
+                                            "Ambae",
+                                            "Gaua",
+                                            "Vanua Lava")),
+             color=as.factor(colonisation))) +
+  stat_summary(
+    aes(group = pop),
+    geom = "pointrange",
+    fun.data = mean_cl_boot,
+    size = 1
+  ) +
+  geom_jitter(
+    width = 0.1,
+    height = 0.1,
+    alpha = 0.25
+  ) +
+  geom_vline(xintercept = 2.5, linetype="dashed", color="darkgrey") +
+  scale_color_manual(values=c("#ad5e95", #recent col
+                              "#e9c46a",#LHI
+                              "#2a9d8f", #NC
+                              "#e76f51", #Heron
+                              "#264653"))+ #Source
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = background_colour,linetype = "blank"),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust=1, size=text_size, family = "ubuntu"),
+    axis.text.y = element_text(size = text_size, family="ubuntu"),
+    axis.title = element_text(size = text_size, family="ubuntu"),
+    axis.title.x = element_blank(),
+    legend.position = "right",
+    legend.text = element_text(family="ubuntu", size=11),
+    legend.title = element_text(family="ubuntu")) +
+  labs(
+    y = "Body size (PC1)\n",  family = "ubuntu", color="Population age")
+
+bill_plot <- df %>%
+  drop_na(bill_PC1) %>% 
+  mutate(pop=gsub("_", " ", pop)) %>%
+  ggplot(aes(y = bill_PC1,
+             x = factor(pop, levels=c("Mainland",
+                                            "Tasmania",
+                                            "French Polynesia",
+                                            "New Zealand",
+                                            "Chatham",
+                                            "Norfolk Island",
+                                            "Heron Island",
+                                            "Lord Howe Island",
+                                            "Grand Terre",
+                                            "Lifou",
+                                            "Mare",
+                                            "Ouvea",
+                                            "Tanna",
+                                            "Efate",
+                                            "Santo",
+                                            "Malekula",
+                                            "Pentecost",
+                                            "Ambrym",
+                                            "Ambae",
+                                            "Gaua",
+                                            "Vanua Lava")),
+             color=as.factor(colonisation))) +
+  stat_summary(
+    aes(group = pop),
+    geom = "pointrange",
+    fun.data = mean_cl_boot,
+    size = 1
+  ) +
+  geom_jitter(
+    width = 0.1,
+    height = 0.1,
+    alpha = 0.25
+  ) +
+  geom_vline(xintercept = 2.5, linetype="dashed", color="darkgrey") +
+  scale_color_manual(values=c("#ad5e95", #recent col
+                              "#e9c46a",#LHI
+                              "#2a9d8f", #NC
+                              "#e76f51", #Heron
+                              "#264653"))+ #Source
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = background_colour,linetype = "blank"),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust=1, size=text_size, family = "ubuntu"),
+    axis.text.y = element_text(size = text_size, family="ubuntu"),
+    axis.title = element_text(size = text_size, family="ubuntu"),
+    axis.title.x = element_blank(),
+    legend.position = "right",
+    legend.text = element_text(family="ubuntu", size=11),
+    legend.title = element_text(family="ubuntu")) +
+  labs(
+    y = "Bill size (PC1)\n",  family = "ubuntu", color="Population age")
+
+ggarrange(body_plot, bill_plot, ncol=2, common.legend = TRUE, legend="bottom")
+
+```
+
+
