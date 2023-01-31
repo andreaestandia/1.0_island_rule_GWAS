@@ -39,7 +39,7 @@ zcat < $BEAGLE_FILE | tail -n +2 | cut -f 3 \
 > temp_files/alt_geno
 
 #Count number of sites in beagle file and create temp file containg just "." on each line
-site_count=$(zcat < window_chr30_25104-28571_100_snps.beagle.gz | tail -n +2 | wc -l)
+site_count=$(zcat < ../../data/wgs/raw/wholegenome_pruned.beagle.gz | tail -n +2 | wc -l)
 for i in $(seq 1 $site_count)
 do
     echo "." >> temp_files/empty
