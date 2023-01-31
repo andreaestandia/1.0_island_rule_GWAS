@@ -1,0 +1,384 @@
+---
+title: "plots_inversions.Rmd"
+author: "Andrea Estandia"
+date: "17/10/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+params:
+  chr: "chr29"
+  beagle: "window_chr29_2257974-2264193_100_snps.beagle"
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Unzip beagle.gz window file if unzipped file does not exist already
+```{r}
+beagle_file <- file.path(
+  reports_path,
+    "localPCA",
+    "beagle_by_window",
+    params$chr,
+    params$beagle)
+
+if (!file.exists(beagle_file)) {
+gunzip(paste0(beagle_file, ".gz"), remove=FALSE)
+}
+```
+
+Read beagle file, remove allele columns, rename columns and remove extra 
+numbers after sample_name
+```{r}
+outlier <- 
+  read.table(file.path(reports_path, 
+                       "localPCA", 
+                              "beagle_by_window",
+                              params$chr,
+                              params$beagle), header=T) %>% 
+  select(-c("allele1", "allele2")) %>% 
+  as_tibble() %>% 
+  pivot_longer(starts_with("Ind")) %>% 
+  rename(sample_name=name) %>%
+  rename(genotype=value) %>% 
+  mutate(sample_name=str_remove(sample_name, "\\.[^.]*$"))
+
+```
+
+Read phenotype file with body size (PC1), pop info and genetic sex
+```{r}
+pheno <-
+  read_tsv(file.path(data_path,
+                     "wgs",
+                     "lists",
+                     "body_PC1.tsv"),
+           col_names = FALSE) %>%
+  rename(sample_name = X1) %>%
+  rename(body_PC1 = X2)
+
+pop_info <- 
+  read_csv(file.path(data_path,
+                     "phenotypes",
+                     "phenotypes+SMC2+AE.csv")) %>%
+  rename(x = sample_name) %>%
+  rename(sample_name = id) %>%
+  select(sample_name, pop, region)
+
+geneticsex <-
+  read_csv(file.path(data_path, 
+                     paste0("phenotypes/geneticsex.csv"))) %>%
+  rename(sample_name = Blood_Number)
+```
+
+Generate a vector repeating the genotypes AA, AB, and BB
+Paste vector to main beagle dataframe
+```{r}
+geno <-
+  rep(c("AA", "AB", "BB"),
+      times = length(outlier$sample_name) / 3)
+
+df <- 
+  cbind(outlier, geno)
+
+df <- df %>% 
+  filter(genotype>0.34) %>% 
+  group_by(sample_name, marker) %>% 
+  top_n(1, genotype)
+```
+
+Merge all datasets and separate column marker into chr and position
+```{r}
+df2 <- 
+  df %>% 
+  left_join(pop_info, by = "sample_name") %>% 
+  left_join(pheno, by = "sample_name") %>% 
+  separate(marker,into = c("chr", "position")) %>% 
+  mutate(position=as.numeric(position)) %>% 
+  unite("marker", chr:position, remove=FALSE)
+```
+
+Read covariance matrix for the window and population labels to give it row names
+```{r}
+label <- 
+  read.table(file.path(data_path,"localPCA/pop_label"))
+
+cov_mat <-
+  as.matrix(read.table(file.path(
+    reports_path,
+      "localPCA",
+      "cov_by_window",
+      params$chr,
+      paste0(params$beagle,".gz.cov")
+  )))
+
+```
+
+Decompose covariance matrix into its eigenvalues 
+```{r}
+#Do PCA on cov matrix
+pca<-eigen(cov_mat)
+
+pca.mat <-
+  as.matrix(pca$vectors %*% (diag(pca$values))^0.5)
+
+nPC <-
+  dim(pca$vectors)[2]
+
+col_PC <- 
+  vector(length=nPC)
+
+for (i in 1 : nPC) {col_PC[i] <-
+  paste0("PC",i)}
+
+#add column names
+colnames(pca.mat) <-
+  c(col_PC)
+
+#add row names
+rownames(pca.mat) <-
+  label$V3
+
+for (x in 1:4) {
+  nam <- 
+    as.character(paste0("var",x))
+    assign(nam, round(pca$values[x]*100/sum(pca$values[pca$values>=0]),2))
+}
+
+pca.mat <- 
+  as.data.frame(pca.mat)
+
+pca.mat$pop <- 
+  label$V3
+
+pca.mat$sample_name <- 
+  label$V1
+
+pca.out <- 
+  pca.mat[,c(1:4)]
+
+pca.out <- 
+  cbind(label, pca.out) %>% 
+  rename(sample_name=V1) %>% 
+  left_join(geneticsex)
+```
+
+Plot PC2 vs PC1 and visually determine how many clusters
+```{r}
+pca.out %>% 
+  ggplot(aes(x=PC1, y=PC2, col=GeneticSex))+
+  geom_point()+
+  theme_minimal() +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size, family="Sans"),
+    axis.title = element_text(size = text_size, family="Sans"),
+    legend.position = "right",
+    legend.text = element_text(family="Sans", size=11),
+    legend.title = element_text(family="Sans"))+
+  labs(x="\nPC1", y="PC2\n", title="Inversion in Chromosome 30", family="Sans")
+```
+
+If 2D is not clear plot in 3D and explore groupings
+```{r}
+df <- 
+  pca.out %>% 
+  distinct(sample_name, .keep_all = T) 
+
+plot_ly(x=df$PC1, 
+        y=df$PC2, 
+        z=df$PC3, 
+        type="scatter3d", 
+        mode="markers", 
+        color=df$V2)
+```
+
+Preselect clusters and bind them
+```{r}
+cluster1 <- 
+  pca.out %>% 
+  filter(PC1 < -1.5) %>% 
+  rename(id=sample_name) %>%
+  rename(sample_name=V2) %>% 
+  left_join(df2, by="sample_name")%>% 
+  mutate(cluster="cluster1")
+
+cluster2 <- 
+  pca.out %>% 
+  filter(PC1 > -1.5) %>%
+  filter(PC1 < 0.1) %>%
+  rename(id=sample_name) %>%
+  rename(sample_name=V2) %>% 
+  left_join(df2, by="sample_name") %>% 
+  mutate(cluster="cluster2")
+
+cluster3 <- 
+  pca.out %>%
+  filter(PC1 > 0.1) %>%
+  rename(id=sample_name) %>%
+  rename(sample_name=V2) %>% 
+  left_join(df2, by="sample_name")%>% 
+  mutate(cluster="cluster3")
+
+clusters <- 
+  rbind(cluster1, cluster2, cluster3)
+```
+
+Select positions of window to set as plot subtitle and make three plots:
+1. PC2 vs PC1 coloured by group of choice
+2. Tiles by population
+3. Tiles by region
+
+Save plots 
+```{r}
+positions <- 
+as.vector(rbind(max(clusters$position), min(clusters$position)))
+
+palette_Dark2 <- 
+  colorRampPalette(brewer.pal(14, "Set2"))
+
+pal <- 
+  palette_Dark2(length(unique(clusters$V5)))
+
+plot1 <- 
+  clusters %>%
+  ggplot(aes(x = PC1, y = PC2, col=V5)) +
+  geom_point() +
+  scale_color_manual(values = pal) +
+  theme_minimal() +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(
+      hjust = 1,
+      size = text_size
+    ),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.position = "bottom",
+    legend.text = element_text(size = 11),
+    legend.title = element_text()
+  ) +
+  labs(
+    x = "\nPC1",
+    y = "PC2\n",
+    title = "Genomic local PC2 vs Genomic local PC1",
+    subtitle = paste0("location: ", positions[1], "-", positions[2]))+ 
+  guides(fill=guide_legend(title="Region"))
+
+
+plot2 <- clusters %>%
+  filter(id!="ABP117") %>% 
+  arrange(position) %>%
+  ggplot(aes(
+    y = as.factor(cluster),
+    x = fct_reorder(marker, position),
+    fill = geno,
+    col = geno
+  )) +
+  geom_tile() +
+  scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+    legend.position = "bottom",
+    panel.grid.major = element_blank(),
+    strip.text.y.right = element_text(angle = 0),
+    strip.text.y.left = element_blank()
+  ) +
+  labs(
+    x = "\nSNPs",
+    y = "Cluster\n",
+    title = paste0("Inversion in ",params$chr),
+    subtitle = paste0("location: ", positions[1], "-", positions[2])
+  ) +
+  facet_grid(rows = vars(factor(cluster, levels = c(
+    "cluster1", "cluster2"
+  )),region))
+
+plot3 <- clusters %>%
+  filter(id!="ABP117") %>% 
+  filter(region!="NA") %>% 
+  arrange(position) %>%
+  ggplot(aes(
+    y = as.factor(cluster),
+    x = fct_reorder(marker, position),
+    fill = geno,
+    col = geno
+  )) +
+  geom_tile() +
+  scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    #axis.text.y = element_blank(),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+    legend.position = "bottom",
+    panel.grid.major = element_blank(),
+    # strip.text.y.right = element_text(angle = 0),
+    #strip.text.y.left = element_blank()
+  ) +
+  labs(
+    x = "\nSNPs",
+    y = "Cluster\n",
+    title = paste0("Inversion in ",params$chr),
+    subtitle = paste0("location: ", positions[1], "-", positions[2])
+  )  +
+  facet_grid(rows = .~region)
+
+
+common_plot <-
+  (plot1+plot3)/plot2+plot_layout(nrow=2)
+
+ggsave(
+  common_plot,
+  filename = file.path(reports_path, 
+                       "localPCA", 
+                       "plots", 
+                       "windows",
+                       paste0(params$beagle,".pdf")),
+  device = "pdf",width = 15, height=8
+)
+
+```
+
+For chr29 - check whether body size is associated with a certain cluster. it seems that it's not
+```{r}
+clusters %>%
+  filter(region=="Mainland"|
+           region=="Heron_Island"|
+           region=="Tasmania"|
+           region=="French_Polynesia"|
+           region=="New_Zealand"|
+           region=="Norfolk_Island") %>% 
+  group_by(cluster) %>% 
+  summarise(t=median(body_PC1, na.rm=T), 
+            max=max(body_PC1, na.rm=T),
+            min=min(body_PC1, na.rm=T))
+```
+
+
+plot_ly(x=clusters$PC1, 
+        y=clusters$PC2, 
+        z=clusters$PC3, 
+        type="scatter3d", 
+        mode="markers", 
+        color=clusters$id)
+
