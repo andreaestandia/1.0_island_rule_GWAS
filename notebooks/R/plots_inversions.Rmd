@@ -7,8 +7,9 @@ editor_options:
   chunk_output_type: console
 params:
   chr: "chr29"
-  beagle: "window_chr29_2257974-2264193_100_snps.beagle"
+  beagle: "window_chr29_1884798-1889384_100_snps.beagle"
 ---
+#window_chr28_4079990-4085228_100_snps.beagle interesting pattern
   
 ```{r setup, echo=FALSE}
 # Knitr settings: 
@@ -173,41 +174,45 @@ pca.out <-
 Plot PC2 vs PC1 and visually determine how many clusters
 ```{r}
 pca.out %>% 
-  ggplot(aes(x=PC1, y=PC2, col=GeneticSex))+
+  filter(sample_name!="N108") %>% 
+  filter(sample_name!="ABP117") %>% 
+  ggplot(aes(x=PC1, y=PC2, col=V4))+
   geom_point()+
   theme_minimal() +
+  scale_color_manual(values = c("#cc4b3f", "#279ae6"))+
   theme(
     panel.border = element_blank(),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(), 
     axis.text.x = element_text(hjust=1, size=text_size),
-    axis.text.y = element_text(size = text_size, family="Sans"),
-    axis.title = element_text(size = text_size, family="Sans"),
+    axis.text.y = element_text(size = text_size, family="Ubuntu"),
+    axis.title = element_text(size = text_size, family="Ubuntu"),
     legend.position = "right",
-    legend.text = element_text(family="Sans", size=11),
-    legend.title = element_text(family="Sans"))+
-  labs(x="\nPC1", y="PC2\n", title="Inversion in Chromosome 30", family="Sans")
+    legend.text = element_text(family="Ubuntu", size=11),
+    legend.title = element_text(family="Ubuntu"))+
+  labs(x="\nPC1", y="PC2\n", title="Outlier window in Chromosome 29\n", family="Ubuntu")+
+  guides(color=guide_legend(title="Region"))#+gghighlight::gghighlight(region=="Mainland")
 ```
 
 If 2D is not clear plot in 3D and explore groupings
 ```{r}
 df <- 
-  pca.out %>% 
-  distinct(sample_name, .keep_all = T) 
+  pca.out_29 %>% 
+  distinct(sample_name, .keep_all = T)
 
 plot_ly(x=df$PC1, 
         y=df$PC2, 
         z=df$PC3, 
         type="scatter3d", 
         mode="markers", 
-        color=df$V2)
+        color=df$V3)
 ```
 
 Preselect clusters and bind them
 ```{r}
 cluster1 <- 
   pca.out %>% 
-  filter(PC1 < -1.5) %>% 
+  filter(PC1 < 0) %>% 
   rename(id=sample_name) %>%
   rename(sample_name=V2) %>% 
   left_join(df2, by="sample_name")%>% 
@@ -215,8 +220,8 @@ cluster1 <-
 
 cluster2 <- 
   pca.out %>% 
-  filter(PC1 > -1.5) %>%
-  filter(PC1 < 0.1) %>%
+  filter(PC1 > 0) %>%
+  filter(PC1 < 2) %>%
   rename(id=sample_name) %>%
   rename(sample_name=V2) %>% 
   left_join(df2, by="sample_name") %>% 
@@ -224,11 +229,12 @@ cluster2 <-
 
 cluster3 <- 
   pca.out %>%
-  filter(PC1 > 0.1) %>%
+  filter(PC1 > 2) %>%
   rename(id=sample_name) %>%
   rename(sample_name=V2) %>% 
   left_join(df2, by="sample_name")%>% 
-  mutate(cluster="cluster3")
+  mutate(cluster="cluster3") #%>% 
+  #filter(id!="ABP117")
 
 clusters <- 
   rbind(cluster1, cluster2, cluster3)
@@ -252,7 +258,8 @@ pal <-
 
 plot1 <- 
   clusters %>%
-  ggplot(aes(x = PC1, y = PC2, col=V5)) +
+  filter(id!="ABP117") %>% 
+  ggplot(aes(x = PC1, y = PC2, col=geno)) +
   geom_point() +
   scale_color_manual(values = pal) +
   theme_minimal() +
@@ -347,6 +354,8 @@ plot3 <- clusters %>%
 common_plot <-
   (plot1+plot3)/plot2+plot_layout(nrow=2)
 
+common_plot
+
 ggsave(
   common_plot,
   filename = file.path(reports_path, 
@@ -374,6 +383,332 @@ clusters %>%
             min=min(body_PC1, na.rm=T))
 ```
 
+```{r}
+df <- 
+  clusters %>% 
+  group_by(region, geno) %>% 
+  summarise(n=n())
+
+regions <-
+  df %>% 
+  distinct(region) %>% 
+  drop_na() 
+
+for (i in as.vector(regions$region)) {
+  #sum all genotypes by region
+  total_geno <- df %>%
+    group_by(region) %>%
+    drop_na() %>%
+    summarise(total_n = sum(n))
+  #sum all genotypes containing allele B
+  total_b <- df %>%
+    filter(grepl("B", geno)) %>%
+    group_by(region) %>%
+    drop_na() %>%
+    summarise(total_b = sum(n))
+  #merge dataset
+  summary_alleles_b <-
+    full_join(total_geno, total_b)
+  
+}
+
+summary_alleles_b$percentage_b <- summary_alleles_b[,3]/summary_alleles_b[,2]
+summary_alleles_b
+
+```
+
+
+```{r}
+outlier <- 
+  read.table(file.path(reports_path, 
+                       "localPCA", 
+                              "chr29_inversion",
+                              "inversion_chr29.beagle"), header=T) %>% 
+  select(-c("allele1", "allele2")) %>% 
+  as_tibble() %>% 
+  pivot_longer(starts_with("Ind")) %>% 
+  rename(sample_name=name) %>%
+  rename(genotype=value) %>% 
+  mutate(sample_name=str_remove(sample_name, "\\.[^.]*$"))
+```
+
+Plot chr29 with covariance matrix for whole inverted region
+```{r}
+cov_mat_29 <-
+  as.matrix(read.table(file.path(
+    reports_path,
+      "localPCA",
+      "outlier_mds",
+      "cov",
+      "chr2_135619511-chr2_143222448.cov")
+  ))
+
+pca_29 <-
+  eigen(cov_mat_29)
+
+pca.mat_29 <-
+  as.matrix(pca_29$vectors %*% (diag(pca_29$values))^0.5)
+
+nPC_29 <-
+  dim(pca_29$vectors)[2]
+
+col_PC_29 <- 
+  vector(length=nPC)
+
+for (i in 1 : nPC_29) {col_PC_29[i] <-
+  paste0("PC",i)}
+
+#add column names
+colnames(pca.mat_29) <-
+  c(col_PC_29)
+
+#add row names
+rownames(pca.mat_29) <-
+  label$V3
+
+for (x in 1:4) {
+  nam <- 
+    as.character(paste0("var",x))
+    assign(nam, round(pca_29$values[x]*100/sum(pca_29$values[pca_29$values>=0]),2))
+}
+
+pca.mat_29 <- 
+  as.data.frame(pca.mat_29)
+
+pca.mat_29$pop <- 
+  label$V3
+
+pca.mat_29$sample_name <- 
+  label$V1
+
+pca.out_29 <- 
+  pca.mat_29[,c(1:4)]
+
+pca.out_29 <- 
+  cbind(label, pca.out_29) %>% 
+  rename(sample_name=V1) %>% 
+  left_join(geneticsex)
+
+```
+
+
+```{r}
+pca.out_29 %>% 
+  #filter(sample_name!="N108") %>% 
+  #filter(sample_name!="ABP117") %>% 
+ # filter(GeneticSex!="NA") %>% 
+  ggplot(aes(x=PC1, y=PC2, col=V4))+
+  geom_point()+
+  theme_minimal() +
+  #scale_colour_manual(values=c("#4483a2", "#e38440"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size, family="Ubuntu"),
+    axis.title = element_text(size = text_size, family="Ubuntu"),
+    legend.position = "right",
+    legend.text = element_text(family="Ubuntu", size=11),
+    legend.title = element_text(family="Ubuntu"))+
+  labs(x="\nPC1", y="PC2\n", family="Ubuntu")+
+  guides(color=guide_legend(title="Region"))#+gghighlight::gghighlight(region=="Mainland")
+
+pca.out_29 %>% 
+  filter(PC1 < 0 & PC1 > -0.5) %>% 
+  filter(PC1 < -1) %>% 
+  group_by(V3) %>% 
+  summarise(n = n())
+```
+
+
+```{r}
+cluster1 <- 
+  pca.out_29 %>% 
+  filter(PC1 < -1) %>% 
+  rename(id=sample_name) %>%
+  rename(sample_name=V2) %>% 
+  left_join(df2, by="sample_name")%>% 
+  mutate(cluster="cluster1")
+
+cluster2 <- 
+  pca.out_29 %>% 
+  filter(PC1 > -1) %>%
+  filter(PC1 < 0) %>%
+  rename(id=sample_name) %>%
+  rename(sample_name=V2) %>% 
+  left_join(df2, by="sample_name") %>% 
+  mutate(cluster="cluster2")
+
+cluster3 <- 
+  pca.out_29 %>%
+  filter(PC1 > 0) %>%
+  rename(id=sample_name) %>%
+  rename(sample_name=V2) %>% 
+  left_join(df2, by="sample_name")%>% 
+  mutate(cluster="cluster3") #%>% 
+  #filter(id!="ABP117")
+
+clusters_29 <- 
+  rbind(cluster1, cluster2, cluster3)
+```
+
+```{r}
+positions <- 
+as.vector(rbind(max(clusters_29$position), min(clusters_29$position)))
+
+palette_Dark2 <- 
+  colorRampPalette(brewer.pal(14, "Set2"))
+
+pal <- 
+  palette_Dark2(length(unique(clusters_29$V3)))
+
+plot1_29 <- 
+  clusters_29 %>%
+  filter(id!="ABP117") %>% 
+  ggplot(aes(x = PC1, y = PC2, col=region)) +
+  geom_point() +
+  scale_color_manual(values = pal) +
+  theme_minimal() +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(
+      hjust = 1,
+      size = text_size
+    ),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.position = "bottom",
+    legend.text = element_text(size = 11),
+    legend.title = element_text()
+  ) +
+  labs(
+    x = "\nPC1",
+    y = "PC2\n",
+    title = "Genomic local PC2 vs Genomic local PC1",
+    subtitle = paste0("location: ", positions[1], "-", positions[2]))+ 
+  guides(fill=guide_legend(title="Region"))
+
+
+plot2_29 <- clusters_29 %>%
+  filter(id!="ABP117") %>% 
+  arrange(position) %>%
+  ggplot(aes(
+    y = as.factor(cluster),
+    x = fct_reorder(marker, position),
+    fill = geno,
+    col = geno
+  )) +
+  geom_tile() +
+  scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+    legend.position = "bottom",
+    panel.grid.major = element_blank(),
+    strip.text.y.right = element_text(angle = 0),
+    strip.text.y.left = element_blank()
+  ) +
+  labs(
+    x = "\nSNPs",
+    y = "Cluster\n",
+    title = paste0("Inversion in ",params$chr),
+    subtitle = paste0("location: ", positions[1], "-", positions[2])
+  ) +
+  facet_grid(rows = vars(factor(cluster, levels = c(
+    "cluster1", "cluster2"
+  )),region))
+
+plot3_29 <- clusters_29 %>%
+  filter(id!="ABP117") %>% 
+  filter(region!="NA") %>% 
+  arrange(position) %>%
+  ggplot(aes(
+    y = as.factor(cluster),
+    x = fct_reorder(marker, position),
+    fill = geno,
+    col = geno
+  )) +
+  geom_tile() +
+  scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    #axis.text.y = element_blank(),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+    legend.position = "bottom",
+    panel.grid.major = element_blank(),
+    # strip.text.y.right = element_text(angle = 0),
+    #strip.text.y.left = element_blank()
+  ) +
+  labs(
+    x = "\nSNPs",
+    y = "Cluster\n",
+    title = paste0("Inversion in ",params$chr),
+    subtitle = paste0("location: ", positions[1], "-", positions[2])
+  )  +
+  facet_grid(rows = .~region)
+
+
+common_plot_29 <-
+  (plot1_29+plot3_29)/plot2_29+plot_layout(nrow=2)
+
+common_plot_29
+
+ggsave(
+  common_plot_29,
+  filename = file.path(reports_path, 
+                       "localPCA", 
+                       "plots", 
+                       "windows",
+                       "full_inversion_chr29.pdf"),
+  device = "pdf",width = 15, height=8
+)
+
+```
+
+
+```{r}
+clusters_29 %>%
+  filter(cluster=="cluster1") %>% 
+  filter(region!="NA") %>% 
+  arrange(position) %>%
+  ggplot(aes(
+    y = geno,
+    x = fct_reorder(marker, position),
+    fill = geno,
+    col = geno
+  )) +
+  geom_tile() +
+  scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    #axis.text.y = element_blank(),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+    legend.position = "bottom",
+    panel.grid.major = element_blank(),
+    # strip.text.y.right = element_text(angle = 0),
+    #strip.text.y.left = element_blank()
+  ) +
+  labs(
+    x = "\nSNPs",
+    y = "Cluster\n",
+    title = paste0("Cluster1"),
+    subtitle = paste0("location: ", positions[1], "-", positions[2])
+  )  +
+  facet_grid(rows = .~id)
+```
 
 plot_ly(x=clusters$PC1, 
         y=clusters$PC2, 

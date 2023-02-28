@@ -27,14 +27,16 @@ chr<-scan(text=args[5], sep=",")
 
 ```{r}
 
-big_data <- read.table(file.path(reports_path,"localPCA/big_data/chr1-30Z4A1A_localpca.csv"), header=T)
-chr30 <- big_data %>% filter(LG=="chr30")
+big_data <- 
+  read.table(file.path(reports_path,
+                       "localPCA/big_data/chr1-30Z4A1A_localpca.csv"),
+             header=T)
 
 window_size=100
 N_ind=377
 N_PC=2
 N_MDS=20
-chr="chr1A"
+chr="chr3"
 
 mds_by_chr <- function(chr){
   
@@ -72,8 +74,11 @@ mds_by_chr <- function(chr){
   #import each covariance matrix and make the eigen decomposition
   for (i in 1: dim(window_order)[1])
   {
-    print(paste("import covariance matrix for window and get eigenvectors",i))
-    window_covmats_i<-as.matrix(read.table(file.path(reports_path, paste0("localPCA/cov_by_window/",chr,"/",window_order$file_name[i]))))
+    print(paste("import covariance matrix for window and get eigenvectors",i,"/", dim(window_order)[1]))
+    window_covmats_i<-as.matrix(read.table(file.path(reports_path,
+                                                     "localPCA/cov_by_window",
+                                                      chr,
+                                                      window_order$file_name[i])))
     window_eigs [i,]<- cov_pca(k=N_PC, covmat=window_covmats_i)
   }
   
@@ -91,6 +96,8 @@ mds_by_chr <- function(chr){
 }
 
 chromosome_list <- paste0("chr", as.character(seq(from = 20, to = 29)))
+
+mds_chr <- mds_by_chr(chr)
 
 datalist = list()
 for (chromo in chromosome_list) {
@@ -112,6 +119,8 @@ png(
 )
 
 big_data %>%
+  filter(LG=="chr30") %>% 
+  filter(start>476442) %>% 
   ggplot(aes(x=n, y=PC1, color=LG))+
   geom_point()+
   scale_x_continuous(
@@ -120,17 +129,25 @@ big_data %>%
     expand = c(0.01, 0.01)
   ) +
   scale_color_manual(values=rep(c("#348544", "#69bf5a"), length(unique(big_data$LG))))+
-  labs(x = "\nChromosome") +
+  labs(x = "\nChromosome 30", y="MDS1") +
   geom_hline(yintercept=sd(big_data$PC1)*4, linetype="dashed")+
-  geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
   theme_classic() +
   theme(
     text = element_text(size=12, family="ubuntu"),
     legend.position = "none", 
-    panel.border = element_blank()
-  )
+    axis.text.x = element_blank(),
+    panel.border = element_blank())
 
 dev.off()
+
+#Filter those windows above the threshold. We only want to keep those set of windows that are adjacent 
+#For example, chr18 shows less than 5 adjacent windows
+big_data %>%
+  filter(PC1 > sd(PC1)*4 | 
+           PC1 < -sd(big_data$PC1)*4) %>% 
+  arrange(LG)
+
 ```
 
 ```{r}
@@ -145,9 +162,13 @@ dev.off()
 
 Read PCA with only inversion section
 ```{r}
-cov_mat <- as.matrix(read.table(file.path(reports_path, paste0("localPCA/chr30_inversion/inversions_chr30_pca_out.cov"))))
+cov_mat <- as.matrix(read.table("/media/sjoh4959/My Passport1/Andrea/projects/1.0_island_rule_GWAS/reports/localPCA/outlier_mds/cov/chr29_1721197-chr29_1889384.cov"))
 
-pheno <- read_csv("/home/zoo/sjoh4959/Documents/projects/0.0_island_rule/data/raw/phenotypes_gwas.csv")
+pheno <- read_csv(file.path(data_path, paste0("phenotypes/phenotypes+SMC2+AE.csv")))
+geneticsex <- read_csv(file.path(data_path, paste0("phenotypes/geneticsex.csv"))) %>% 
+  rename(sample_name=Blood_Number)
+
+pheno <- left_join(pheno, geneticsex)
 
 pca<-eigen(cov_mat)
 
@@ -177,9 +198,13 @@ pca.out <- pca.out %>% rename(sample_name=V1)
 
 pca.out <- pheno %>% left_join(pca.out, by="sample_name")
 
-pca.out %>% 
-  filter(PC1< -1 | PC1> -0.5) %>% 
-  ggplot(aes(x=PC1, y=PC2, col=V4))+
+#plot_chr30 <- 
+  pca.out %>% 
+    #filter(GeneticSex!="NA") %>% 
+  #filter(PC1< -1 | PC1> -0.5) %>% 
+ # filter(position<18500) %>% 
+  ggplot(aes(x=PC1, y=Tarsus,col=V4))+
+   # geom_violin()+
   geom_point()+
   scale_colour_manual(values=c("#4483a2", "#e38440"))+
   theme_minimal() +
@@ -194,8 +219,15 @@ pca.out %>%
     legend.position = "right",
     legend.text = element_text(family="ubuntu", size=11),
     legend.title = element_text(family="ubuntu"))+
-  labs(x="\nPC1", y="PC2\n", title="Inversion in Chromosome 30", family="ubuntu")
+  labs(x="\nPC1", y="Tarsus\n", title="Inversion in Chromosome 29", family="ubuntu")
   
+  plot_ly(x=clusters$PC1, y=clusters$PC2, z=clusters$PC3, type="scatter3d", mode="markers", color=clusters$cluster)
+  
+plot_chr30+
+transition_states(position, transition_length = 3, state_length = 1) +
+  labs(subtitle = "Year: {frame_time}")+enter_fade() +
+  exit_fade()
+
 
 first+intermediate+second+plot_layout(guides = "collect")+plot_annotation(
   title = 'PCA for clusters in Chr4A')
