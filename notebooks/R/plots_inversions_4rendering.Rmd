@@ -1,17 +1,13 @@
 ---
-title: "plots_inversions.Rmd"
+title: "plots_inversions_4rendering.Rmd"
 author: "Andrea Estandia"
 date: "17/10/2022"
 output:
   pdf_document: default
-  html_document:
-    df_print: paged
 editor_options:
   chunk_output_type: inline
 params:
-  beagle: chr30_1054214-chr30_1110750.beagle
-
-
+  beagle: beagle_list[i]
 ---
   
 ```{r setup, echo=FALSE}
@@ -254,6 +250,8 @@ pca_plot <- clusters %>%
 plot_mds_pca <- 
   mds_plot+pca_plot+plot_layout(guides = "collect")
 
+plot_mds_pca
+
 ggsave(
   plot_mds_pca,
   filename = file.path(reports_path, 
@@ -263,9 +261,157 @@ ggsave(
 )
 ```
 
-```{r}
-plot_mds_pca
-```
+<!-- If 2D is not clear plot in 3D and explore groupings -->
+<!-- ```{r} -->
+<!-- df <-  -->
+<!--   clusters %>%  -->
+<!--   distinct(sample_name, .keep_all = T) -->
+
+<!-- plot_ly(x=df$PC1,  -->
+<!--         y=df$PC2,  -->
+<!--         z=df$PC3,  -->
+<!--         type="scatter3d",  -->
+<!--         mode="markers",  -->
+<!--         color=df$k) -->
+<!-- ``` -->
+
+<!-- Select positions of window to set as plot subtitle and make three plots: -->
+<!-- 1. PC2 vs PC1 coloured by group of choice -->
+<!-- 2. Tiles by population -->
+<!-- 3. Tiles by region -->
+
+<!-- Save plots  -->
+<!-- ```{r} -->
+<!-- positions <-  -->
+<!-- as.vector(rbind(min(clusters$position), max(clusters$position))) -->
+
+<!-- palette_Dark2 <-  -->
+<!--   colorRampPalette(brewer.pal(14, "Set2")) -->
+
+<!-- pal <-  -->
+<!--   palette_Dark2(length(unique(clusters$pop))) -->
+
+<!-- plot1 <-  -->
+<!--   clusters %>% -->
+<!--   distinct(id, .keep_all = T) %>%  -->
+<!--   ggplot(aes(x = Dim.1, y = Dim.2, col=as.factor(k))) + -->
+<!--   geom_point() + -->
+<!--   scale_color_manual(values = c("#264653", -->
+<!--                                 "#2a9d8f",  -->
+<!--                                 "#e9c46a"))+ -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     panel.border = element_blank(), -->
+<!--     panel.grid.major = element_blank(), -->
+<!--     panel.grid.minor = element_blank(), -->
+<!--     axis.text.x = element_text( -->
+<!--       hjust = 1, -->
+<!--       size = text_size -->
+<!--     ), -->
+<!--     axis.text.y = element_text(size = text_size), -->
+<!--     axis.title = element_text(size = text_size), -->
+<!--     legend.position = "bottom", -->
+<!--     legend.text = element_text(size = 11), -->
+<!--     legend.title = element_text() -->
+<!--   ) + -->
+<!--   labs( -->
+<!--     x = "\nMDS1", -->
+<!--     y = "MDS2\n", -->
+<!--     title = paste0("Chr30: ", positions[1], "-", positions[2]))+  -->
+<!--   guides(col=guide_legend(title="")) -->
+
+
+<!-- plot2 <- clusters %>% -->
+<!--   arrange(position) %>% -->
+<!--   ggplot(aes( -->
+<!--     y = as.factor(k), -->
+<!--     x = fct_reorder(marker, position), -->
+<!--     fill = geno, -->
+<!--     col = geno -->
+<!--   )) + -->
+<!--   geom_tile() + -->
+<!--   scale_fill_manual(values = c("#264653", -->
+<!--                                 "#2a9d8f",  -->
+<!--                                 "#e9c46a"))+ -->
+<!--   scale_color_manual(values = c("#264653", -->
+<!--                                 "#2a9d8f",  -->
+<!--                                 "#e9c46a"))+ -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     axis.text.x = element_blank(), -->
+<!--     axis.text.y = element_blank(), -->
+<!--     axis.title = element_text(size = text_size), -->
+<!--     legend.title = element_text(), -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major = element_blank(), -->
+<!--     strip.text.y.right = element_text(angle = 0), -->
+<!--     strip.text.y.left = element_blank() -->
+<!--   ) + -->
+<!--   labs( -->
+<!--     x = "\nSNPs", -->
+<!--     y = "Cluster\n", -->
+<!--     title = paste0("Inversion in ",params$chr), -->
+<!--     subtitle = paste0("location: ", positions[1], "-", positions[2]) -->
+<!--   ) + -->
+<!--   facet_grid(rows = vars(factor(k, levels = c( -->
+<!--     "1", "2" -->
+<!--   )),region)) -->
+
+<!-- plot3 <- clusters %>% -->
+<!--   filter(region!="NA") %>%  -->
+<!--   arrange(position) %>% -->
+<!--   ggplot(aes( -->
+<!--     y = as.factor(k), -->
+<!--     x = fct_reorder(marker, position), -->
+<!--     fill = geno, -->
+<!--     col = geno -->
+<!--   )) + -->
+<!--   geom_tile() + -->
+<!--   scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) + -->
+<!--   scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     axis.text.x = element_blank(), -->
+<!--     #axis.text.y = element_blank(), -->
+<!--     axis.title = element_text(size = text_size), -->
+<!--     legend.title = element_text(), -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major = element_blank(), -->
+<!--     # strip.text.y.right = element_text(angle = 0), -->
+<!--     #strip.text.y.left = element_blank() -->
+<!--   ) + -->
+<!--   labs( -->
+<!--     x = "\nSNPs", -->
+<!--     y = "Cluster\n", -->
+<!--     title = paste0("Inversion in ",params$chr), -->
+<!--     subtitle = paste0("location: ", positions[1], "-", positions[2]) -->
+<!--   )  + -->
+<!--   facet_grid(rows = .~region) -->
+
+
+<!-- common_plot <- -->
+<!--   (plot1+plot3)/plot2+plot_layout(nrow=2) -->
+
+<!-- common_plot -->
+
+<!-- ggsave( -->
+<!--   common_plot, -->
+<!--   filename = file.path(reports_path,  -->
+<!--                        "localPCA",  -->
+<!--                        "plots",  -->
+<!--                        "windows", -->
+<!--                        paste0(params$beagle,".pdf")), -->
+<!--   device = "pdf",width = 15, height=8 -->
+<!-- ) -->
+
+<!-- clusters %>% -->
+<!--   filter(genotype>0.34) %>%  -->
+<!--   group_by(marker, geno, region) %>%  -->
+<!--   summarise(n=n()) %>%  -->
+<!--   ggplot(aes(x=marker,y=n,fill=geno))+ -->
+<!--   geom_bar(stat="identity") -->
+
+<!-- ``` -->
 
 ```{r}
 df <- 
@@ -345,6 +491,14 @@ summary_alleles_cluster$percentage_cluster3 <-
 
 summary_alleles_cluster
 
+write_csv(df_map,
+          file.path(reports_path, 
+                   "localPCA", 
+                   "outlier_mds", 
+                   paste0(params$beagle,"_summary_alleles_cluster.csv")))
+```
+
+```{r}
 df_map <-
   summary_alleles_cluster %>% 
   left_join(pop_info, by="pop") %>% 
@@ -358,14 +512,6 @@ df_map$percentage_cluster2 <-
 df_map$percentage_cluster3 <-
   as.numeric(unlist(df_map$percentage_cluster3))
 
-write_csv(df_map,
-          file.path(reports_path, 
-                   "localPCA", 
-                   "outlier_mds", 
-                   paste0(params$beagle,"_summary_alleles_cluster.csv")))
-```
-
-```{r}
 df_map[is.na(df_map)] <- 0
 
 oceania <-
@@ -395,7 +541,9 @@ anzo <- ggplot(data = oceania) +
                     data = df_map, cols=c("percentage_cluster1", 
                                           "percentage_cluster2", 
                                           "percentage_cluster3"), color=NA) + 
-    scale_fill_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))
+    scale_fill_manual(values=c("#4483a2", 
+                               "#e38440",
+                               "#d9c31e"))
 
 ggplot(data = oceania) +
     geom_sf(fill = "darkgrey", color = NA) +
@@ -419,7 +567,9 @@ ggplot(data = oceania) +
                     data = df_map, cols=c("percentage_cluster1", 
                                           "percentage_cluster2", 
                                           "percentage_cluster3"), color=NA) + 
-    scale_fill_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))
+    scale_fill_manual(values=c("#4483a2", 
+                               "#e38440",
+                               "#d9c31e"))
 
 ggplot(data = oceania) +
     geom_sf(fill = "darkgrey", color = NA) +
@@ -443,7 +593,9 @@ ggplot(data = oceania) +
                     data = df_map, cols=c("percentage_cluster1", 
                                           "percentage_cluster2", 
                                           "percentage_cluster3"), color=NA) + 
-    scale_fill_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))
+    scale_fill_manual(values=c("#4483a2", 
+                               "#e38440",
+                               "#d9c31e"))
 
 van_sm <- ggplot(data = oceania) +
     geom_sf(fill = "darkgrey", color = NA) +
@@ -467,7 +619,9 @@ van_sm <- ggplot(data = oceania) +
                     data = df_map, cols=c("percentage_cluster1", 
                                           "percentage_cluster2", 
                                           "percentage_cluster3"), color=NA) + 
-    scale_fill_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))
+    scale_fill_manual(values=c("#4483a2", 
+                               "#e38440",
+                               "#d9c31e"))
 
 chartpie <- 
   anzo+van_sm+plot_layout(guides="collect")
@@ -482,118 +636,4 @@ ggsave(
   device = "pdf",width = 10, height=5
 )
 ```
-
-
-
-<!-- ```{r} -->
-<!-- positions <-  -->
-<!-- as.vector(rbind(max(clusters$position), min(clusters$position))) -->
-<!-- palette_Dark2 <-  -->
-<!--   colorRampPalette(brewer.pal(14, "Set2")) -->
-<!-- pal <-  -->
-<!--   palette_Dark2(length(unique(clusters$V5))) -->
-<!-- plot1 <-  -->
-<!--   clusters %>% -->
-<!--   filter(id!="ABP117") %>%  -->
-<!--   ggplot(aes(x = PC1, y = PC2, col=geno)) + -->
-<!--   geom_point() + -->
-<!--   scale_color_manual(values = pal) + -->
-<!--   theme_minimal() + -->
-<!--   theme( -->
-<!--     panel.border = element_blank(), -->
-<!--     panel.grid.major = element_blank(), -->
-<!--     panel.grid.minor = element_blank(), -->
-<!--     axis.text.x = element_text( -->
-<!--       hjust = 1, -->
-<!--       size = text_size -->
-<!--     ), -->
-<!--     axis.text.y = element_text(size = text_size), -->
-<!--     axis.title = element_text(size = text_size), -->
-<!--     legend.position = "bottom", -->
-<!--     legend.text = element_text(size = 11), -->
-<!--     legend.title = element_text() -->
-<!--   ) + -->
-<!--   labs( -->
-<!--     x = "\nPC1", -->
-<!--     y = "PC2\n", -->
-<!--     title = "Genomic local PC2 vs Genomic local PC1", -->
-<!--     subtitle = paste0("location: ", positions[1], "-", positions[2]))+  -->
-<!--   guides(fill=guide_legend(title="Region")) -->
-<!-- plot2 <- clusters %>% -->
-<!--   filter(id!="ABP117") %>%  -->
-<!--   arrange(position) %>% -->
-<!--   ggplot(aes( -->
-<!--     y = as.factor(cluster), -->
-<!--     x = fct_reorder(marker, position), -->
-<!--     fill = geno, -->
-<!--     col = geno -->
-<!--   )) + -->
-<!--   geom_tile() + -->
-<!--   scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) + -->
-<!--   scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) + -->
-<!--   theme_minimal() + -->
-<!--   theme( -->
-<!--     axis.text.x = element_blank(), -->
-<!--     axis.text.y = element_blank(), -->
-<!--     axis.title = element_text(size = text_size), -->
-<!--     legend.title = element_text(), -->
-<!--     legend.position = "bottom", -->
-<!--     panel.grid.major = element_blank(), -->
-<!--     strip.text.y.right = element_text(angle = 0), -->
-<!--     strip.text.y.left = element_blank() -->
-<!--   ) + -->
-<!--   labs( -->
-<!--     x = "\nSNPs", -->
-<!--     y = "Cluster\n", -->
-<!--     title = paste0("Inversion in ",params$chr), -->
-<!--     subtitle = paste0("location: ", positions[1], "-", positions[2]) -->
-<!--   ) + -->
-<!--   facet_grid(rows = vars(factor(cluster, levels = c( -->
-<!--     "cluster1", "cluster2" -->
-<!--   )),region)) -->
-<!-- plot3 <- clusters %>% -->
-<!--   filter(id!="ABP117") %>%  -->
-<!--   filter(region!="NA") %>%  -->
-<!--   arrange(position) %>% -->
-<!--   ggplot(aes( -->
-<!--     y = as.factor(cluster), -->
-<!--     x = fct_reorder(marker, position), -->
-<!--     fill = geno, -->
-<!--     col = geno -->
-<!--   )) + -->
-<!--   geom_tile() + -->
-<!--   scale_fill_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) + -->
-<!--   scale_color_manual(values = c("#cc4b3f", "#279ae6", "#e6bf27")) + -->
-<!--   theme_minimal() + -->
-<!--   theme( -->
-<!--     axis.text.x = element_blank(), -->
-<!--     #axis.text.y = element_blank(), -->
-<!--     axis.title = element_text(size = text_size), -->
-<!--     legend.title = element_text(), -->
-<!--     legend.position = "bottom", -->
-<!--     panel.grid.major = element_blank(), -->
-<!--     # strip.text.y.right = element_text(angle = 0), -->
-<!--     #strip.text.y.left = element_blank() -->
-<!--   ) + -->
-<!--   labs( -->
-<!--     x = "\nSNPs", -->
-<!--     y = "Cluster\n", -->
-<!--     title = paste0("Inversion in ",params$chr), -->
-<!--     subtitle = paste0("location: ", positions[1], "-", positions[2]) -->
-<!--   )  + -->
-<!--   facet_grid(rows = .~region) -->
-<!-- common_plot <- -->
-<!--   (plot1+plot3)/plot2+plot_layout(nrow=2) -->
-<!-- common_plot -->
-<!-- ggsave( -->
-<!--   common_plot, -->
-<!--   filename = file.path(reports_path,  -->
-<!--                        "localPCA",  -->
-<!--                        "plots",  -->
-<!--                        "windows", -->
-<!--                        paste0(params$beagle,".pdf")), -->
-<!--   device = "pdf",width = 15, height=8 -->
-<!-- ) -->
-
-<!-- ``` -->
 

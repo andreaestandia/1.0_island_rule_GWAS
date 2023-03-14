@@ -1,0 +1,91 @@
+---
+title: "plot_histogram_LD"
+author: "Andrea Estandia"
+date: "10/03/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Open cov 
+```{r}
+output_LD <-
+  read.csv(file.path(
+    reports_path,
+      "LD",
+      "LDdecay",
+      "output.csv"
+  ))
+
+plot_minLD <- output_LD %>% 
+  ggplot(aes(x=fct_reorder(File, LDmin),
+             y=LDmin))+
+  geom_bar(stat="identity")+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(size=text_size, angle=45, hjust = 1),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    axis.ticks = element_blank())+
+  labs(x="", y="Mininum LD within 100kb\n")
+
+plot_LDmax <- output_LD %>% 
+  ggplot(aes(x=fct_reorder(File, LDmax),
+             y=LDmax))+
+  geom_bar(stat="identity")+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(size=text_size, angle=45, hjust = 1),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    axis.ticks = element_blank())+
+  labs(x="", y="Maximum LD within 100kb\n")
+
+plot_LDavg <- output_LD %>% 
+  mutate(LDmean=(LDmin+LDmax)/2) %>% 
+  ggplot(aes(x=fct_reorder(File, LDmean),
+             y=LDmean))+
+  geom_bar(stat="identity")+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(size=text_size, angle=45, hjust = 1),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    axis.ticks = element_blank())+
+  labs(x="", y="Mean LD within 100kb\n")
+
+
+plot_LDdecay <- output_LD %>% 
+  ggplot(aes(x=fct_reorder(File, DecayRate),
+             y=DecayRate))+
+  geom_bar(stat="identity")+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(size=text_size, angle=45, hjust = 1),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    axis.ticks = element_blank())+
+  labs(x="", y="LD decay rate within 100kb\n")
+
+(plot_minLD + plot_LDmax) / (plot_LDavg + plot_LDdecay) + plot_annotation(tag_levels="A")
+```

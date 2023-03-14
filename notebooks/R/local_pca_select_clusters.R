@@ -83,7 +83,8 @@ for (j in 1:max_MDS)
     width = 25, 
     units="cm"
   )
-  #keep outliers on the positive side
+  
+    #keep outliers on the positive side
   mds_outliers <-
     mds_scores[mds_vector >= (mds_mean + sd_lim * mds_sd), c(2, 5, 6, mds_col)]
   mds_outliers$window <- as.numeric(row.names(mds_outliers))
@@ -363,3 +364,99 @@ write.table(
   sep = "\t"
 )
 
+
+##Plot MDS1 vs MDS2 by chr
+
+plotlist <- list()
+#myplot <- patchwork::wrap_plots(mylist, nrow=1)
+for (i in unique(mds_scores$LG)){
+  
+  plot_tmp <- mds_scores %>%
+    filter(LG==i) %>% 
+    ggplot(aes(x=X2, y=PC1))+
+    geom_point(col="#cc7716")+
+    scale_x_continuous(
+      label = axisdf$LG,
+      breaks = axisdf$center,
+      expand = c(0.01, 0.01)
+    ) +
+    labs(x = "MDS2", y="MDS1", title=as.character(i)) +
+    geom_hline(yintercept=sd(mds_scores$PC1)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(mds_scores$PC1)*4, linetype="dashed")+
+    geom_vline(xintercept=sd(mds_scores$X2)*4, linetype="dashed")+
+    geom_vline(xintercept=-sd(mds_scores$X2)*4, linetype="dashed")+
+    theme_classic() +
+    theme(
+      text = element_text(size=12, family="ubuntu"),
+      legend.position = "none", 
+      panel.border = element_blank())+
+    gghighlight::gghighlight(PC1>sd(mds_scores$PC1)*4 | 
+                               PC1 < -sd(mds_scores$PC1)*4 |
+                               X2 < -sd(mds_scores$X2)*4 |
+                               X2 < -sd(mds_scores$X2)*4
+                               )
+  plotlist[[i]] <- plot_tmp
+}
+
+plot_mds1mds2 <- 
+  patchwork::wrap_plots(plotlist,
+                        nrow = 6,
+                        ncol = 6)
+
+ggsave(
+  plot = plot_mds1mds2,
+  filename = paste0(
+    reports_path,
+    "/localPCA/outlier_mds/plots_mds/MDS1_MDS2.png"
+  ),
+  height = 25,
+  width = 25,
+  units="cm"
+)
+
+
+plotlist <- list()
+for (i in unique(mds_scores$LG)){
+  
+  plot_tmp <- mds_scores %>%
+    filter(LG==i) %>% 
+    ggplot(aes(x=X3, y=X4))+
+    geom_point(col="#cc7716")+
+    scale_x_continuous(
+      label = axisdf$LG,
+      breaks = axisdf$center,
+      expand = c(0.01, 0.01)
+    ) +
+    labs(x = "MDS3", y="MDS4", title=as.character(i)) +
+    geom_hline(yintercept=sd(mds_scores$X4)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(mds_scores$X4)*4, linetype="dashed")+
+    geom_vline(xintercept=sd(mds_scores$X3)*4, linetype="dashed")+
+    geom_vline(xintercept=-sd(mds_scores$X3)*4, linetype="dashed")+
+    theme_classic() +
+    theme(
+      text = element_text(size=12, family="ubuntu"),
+      legend.position = "none", 
+      panel.border = element_blank())+
+    gghighlight::gghighlight(X3>sd(mds_scores$X3)*4 | 
+                               X3 < -sd(mds_scores$X3)*4 |
+                               X4 > sd(mds_scores$X4)*4 |
+                               X4 < -sd(mds_scores$X4)*4
+    )
+  plotlist[[i]] <- plot_tmp
+}
+
+plot_mds2mds3 <- 
+  patchwork::wrap_plots(plotlist,
+                        nrow = 6,
+                        ncol = 6)
+
+ggsave(
+  plot = plot_mds2mds3,
+  filename = paste0(
+    reports_path,
+    "/localPCA/outlier_mds/plots_mds/MDS2_MDS3.png"
+  ),
+  height = 25,
+  width = 25,
+  units="cm"
+)

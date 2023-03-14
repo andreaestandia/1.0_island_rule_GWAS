@@ -199,4 +199,41 @@ ggarrange(body_plot, bill_plot, ncol=2, common.legend = TRUE, legend="bottom")
 
 ```
 
+```{r}
+oceania <-
+  ne_countries(scale = "large",
+               returnclass = "sf",
+               continent = "oceania")
+
+
+ggplot(data = oceania) +
+    geom_sf(fill = island_colour, color = NA) +
+    geom_point(
+      data = df_bill_unique,
+      aes(x = longitude, y = latitude, color = mean_bill),
+      size = 2
+    ) +
+    #scale_color_manual(values=magma_pal)+
+    scale_color_viridis(option = "magma") +
+    coord_sf(xlim = c(161, 173),
+             ylim = c(-25,-9),
+             expand = FALSE) +
+    theme(
+      text=element_text(family="ubuntu"),
+      panel.background = element_rect(fill = background_colour),
+      panel.border = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.ticks = element_blank(),
+      # legend.position = "none",
+      plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"))+
+    geom_scatterpie(aes(x=longitude+1, y=latitude+1, group = pop, r = 0.6), 
+                    data = p, cols=c("AA", "AB", "BB"), color=NA) + scale_fill_manual(values=c("#22577E",
+                                                                                               "#247881",
+                                                                                               "#43919B"))
+```
 

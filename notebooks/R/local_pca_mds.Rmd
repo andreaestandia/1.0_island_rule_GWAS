@@ -120,8 +120,8 @@ png(
 
 big_data %>%
   filter(LG=="chr30") %>% 
-  filter(start>476442) %>% 
-  ggplot(aes(x=n, y=PC1, color=LG))+
+  #filter(start>476442) %>% 
+  ggplot(aes(x=X2, y=PC1))+
   geom_point()+
   scale_x_continuous(
     label = axisdf$LG,
@@ -137,16 +137,9 @@ big_data %>%
     text = element_text(size=12, family="ubuntu"),
     legend.position = "none", 
     axis.text.x = element_blank(),
-    panel.border = element_blank())
+    panel.border = element_blank())+gghighlight::gghighlight(PC1 < -sd(big_data$PC1)*4)
 
 dev.off()
-
-#Filter those windows above the threshold. We only want to keep those set of windows that are adjacent 
-#For example, chr18 shows less than 5 adjacent windows
-big_data %>%
-  filter(PC1 > sd(PC1)*4 | 
-           PC1 < -sd(big_data$PC1)*4) %>% 
-  arrange(LG)
 
 ```
 
@@ -162,7 +155,7 @@ dev.off()
 
 Read PCA with only inversion section
 ```{r}
-cov_mat <- as.matrix(read.table("/media/sjoh4959/My Passport1/Andrea/projects/1.0_island_rule_GWAS/reports/localPCA/outlier_mds/cov/chr29_1721197-chr29_1889384.cov"))
+cov_mat <- as.matrix(read.table("/media/sjoh4959/My Passport/Andrea/projects/1.0_island_rule_GWAS/reports/localPCA/outlier_mds/cov/chr30_1452719-chr30_1651499.cov"))
 
 pheno <- read_csv(file.path(data_path, paste0("phenotypes/phenotypes+SMC2+AE.csv")))
 geneticsex <- read_csv(file.path(data_path, paste0("phenotypes/geneticsex.csv"))) %>% 
@@ -199,11 +192,11 @@ pca.out <- pca.out %>% rename(sample_name=V1)
 pca.out <- pheno %>% left_join(pca.out, by="sample_name")
 
 #plot_chr30 <- 
-  pca.out %>% 
+pca.out %>% 
     #filter(GeneticSex!="NA") %>% 
   #filter(PC1< -1 | PC1> -0.5) %>% 
  # filter(position<18500) %>% 
-  ggplot(aes(x=PC1, y=Tarsus,col=V4))+
+  ggplot(aes(x=PC1, y=PC2,col=V4))+
    # geom_violin()+
   geom_point()+
   scale_colour_manual(values=c("#4483a2", "#e38440"))+
