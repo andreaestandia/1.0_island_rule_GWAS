@@ -1,0 +1,239 @@
+---
+title: "process_gwas_outliers.Rmd"
+author: "Andrea Estandia"
+date: "16/03/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+ 
+Read beagle file, remove allele columns, rename columns and remove extra 
+numbers after sample_name
+```{r}
+outlier <- 
+  read_tsv(file.path(reports_path, 
+                       "GWAS", 
+                        "outliers",
+                        "body_pc1_outliers.beagle"),col_names = T) %>% 
+  select(-c("allele1", "allele2")) %>% 
+  as_tibble() %>% 
+  pivot_longer(starts_with("Ind")) %>% 
+  rename(sample_name=name) %>%
+  rename(genotype=value) %>% 
+  mutate(sample_name=str_remove(sample_name, "\\_[^.]*$"))
+```
+
+Read phenotype file with body size (PC1), pop info and genetic sex
+```{r}
+pheno <-
+  read_tsv(file.path(data_path,
+                     "wgs",
+                     "lists",
+                     "body_PC1.tsv"),
+           col_names = FALSE) %>%
+  rename(sample_name = X1) %>%
+  rename(body_PC1 = X2)
+
+geneticsex <-
+  read_csv(file.path(data_path, 
+                     paste0("phenotypes/geneticsex.csv"))) %>%
+  rename(id = Blood_Number)
+
+pop_info <- 
+  read_csv(file.path(data_path,
+                     "phenotypes",
+                     "phenotypes+SMC2+AE.csv")) %>%
+  rename(x = sample_name) %>%
+  rename(sample_name = id) %>%
+  rename(id=x) %>% 
+  select(sample_name, id, pop, region, latitude, longitude) %>% 
+  left_join(geneticsex)
+```
+
+Generate a vector repeating the genotypes AA, AB, and BB
+Paste vector to main beagle dataframe
+```{r}
+geno <-
+  rep(c("AA", "AB", "BB"),
+      times = length(outlier$sample_name) / 3)
+
+df <- 
+  cbind(outlier, geno)
+
+df <- df %>% 
+  filter(genotype>0.34) %>% 
+  group_by(sample_name, marker) %>% 
+  top_n(1, genotype)
+```
+
+Merge all datasets and separate column marker into chr and position
+```{r}
+df2 <- 
+  df %>% 
+  left_join(pop_info, by = "sample_name") %>% 
+  left_join(pheno, by = "sample_name") %>% 
+  separate(marker,into = c("chr", "position")) %>% 
+  mutate(position=as.numeric(position)) %>% 
+  unite("marker", chr:position, remove=FALSE)
+```
+
+```{r}
+info_outliers <-
+  fread(file.path(reports_path,
+                     "GWAS",
+                     "outliers",
+                     "body_pc1_GWAS_outliers_full.csv"),
+           header = "auto") %>% 
+  #filter those outliers above bonferroni cut-off
+  filter(-log10(P)> -log10(0.01 / nrow(info_outliers)))
+
+top_1_outliers <- 
+  info_outliers %>% 
+  arrange(P) %>% 
+  slice(1)
+
+top_12_outliers <- 
+  info_outliers %>% 
+  arrange(P) %>% 
+  slice(1:12)
+```
+
+Plot top outlier
+```{r}
+top1_pos <- top_1_outliers$Position
+top1_major <- paste0(top_1_outliers$Major,top_1_outliers$Major)
+top1_majorminor <- paste0(top_1_outliers$Major,top_1_outliers$Minor)
+top1_minor <- paste0(top_1_outliers$Minor,top_1_outliers$Minor)
+
+body_outlier_top1 <- 
+  df2 %>%
+  filter(position == top1_pos) %>% 
+  drop_na(body_PC1) %>%
+  filter(genotype>0.34) %>% 
+  ggplot(aes(y = body_PC1, x = geno, col = geno)) +
+  geom_violin(trim = FALSE) +
+  stat_summary(aes(y = body_PC1),
+               fun.data = data_summary,
+               geom = "pointrange",
+               shape = 1) +
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust=1, size=text_size, family = "ubuntu"),
+    axis.text.y = element_text(size = text_size, family="ubuntu"),
+    axis.title = element_text(size = text_size, family="ubuntu"),
+    legend.title = element_text(family="ubuntu"),
+    #legend.position = "none",
+        panel.grid.major = element_blank()) +
+  scale_x_discrete(labels=c("AA" = top1_major, "AB" = top1_majorminor,
+                              "BB" = top1_majorminor))+
+  scale_color_manual(values = c("#21577dff", "#99bac2ff", "#428f99ff"),
+                     labels=c("AA" = top1_major, "AB" = top1_majorminor,
+                              "BB" = top1_majorminor)) +
+  labs(title = paste0("chr18 ", top1_pos),
+       y = "Body size (PC1)\n", x = "\nGenotype", family="ubuntu")
+
+  
+```
+
+
+```{r}
+list_plots <- list()
+
+for (i in unique(top_12_outliers$Position)){
+  tmp <- df2 %>%
+      filter(position == i)
+  tmp1 <- top_12_outliers %>% 
+    filter(Position == i)
+  top1_major <- paste0(tmp1$Major,tmp1$Major)
+  top1_majorminor <- paste0(tmp1$Major,tmp1$Minor)
+  top1_minor <- paste0(tmp1$Minor,tmp1$Minor)
+  
+  list_plots[[as.character(i)]] <- 
+  df2 %>%
+  filter(position == i) %>% 
+  drop_na(body_PC1) %>%
+  filter(genotype>0.34) %>% 
+  ggplot(aes(y = body_PC1, x = geno, col = geno)) +
+  geom_violin(trim = FALSE) +
+  stat_summary(aes(y = body_PC1),
+               fun.data = data_summary,
+               geom = "pointrange",
+               shape = 1) +
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust=1, size=text_size, family = "ubuntu"),
+    axis.text.y = element_text(size = text_size, family="ubuntu"),
+    axis.title = element_text(size = text_size, family="ubuntu"),
+    legend.title = element_text(family="ubuntu"),
+    #legend.position = "none",
+        panel.grid.major = element_blank()) +
+  scale_x_discrete(labels=c("AA" = top1_major, "AB" = top1_majorminor,
+                              "BB" = top1_majorminor))+
+  scale_color_manual(values = c("#21577dff", "#99bac2ff", "#428f99ff"),
+                     labels=c("AA" = top1_major, "AB" = top1_majorminor,
+                              "BB" = top1_majorminor)) +
+  labs(title = paste0(unique(tmp[,"chr"])," ", i),
+       y = "Body size (PC1)\n", x = "\nGenotype", family="ubuntu")
+  
+}
+
+plots <- wrap_plots(list_plots)
+
+ggsave(
+  "top12_outliers_effect_body_PC1.pdf",
+  plots,
+  path = figures_path,
+  device = "pdf",
+  width = 15,
+  height = 10,
+  dpi = 400
+)
+```
+
+
+```{r}
+list_summary_pop <- list()
+
+for (i in unique(top_12_outliers$Position)){
+  tmp <- df2 %>%
+      filter(position == i)
+  list_summary_pop[[as.character(i)]] <- 
+  df2 %>%
+  filter(position == i) %>% 
+  drop_na(body_PC1) %>%
+  filter(genotype>0.34) %>% 
+  group_by(pop,geno,chr,position) %>% 
+  summarise(n=n())
+}
+
+for (sublist in 1:length(list_summary_pop)){
+  write.xlsx(list_summary_pop[sublist], 
+             file=file.path(reports_path,
+                            "GWAS",
+                            "outliers",
+                            "body_PC1_outlier_genotype_per_pop.xlsx"), 
+             sheetName=paste(sublist), 
+             row.names=FALSE,
+             append=T)
+}
+```
+

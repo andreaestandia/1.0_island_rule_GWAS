@@ -26,10 +26,9 @@ N_MDS<-as.numeric(argv[4])
 chr<-scan(text=args[5], sep=",")
 
 ```{r}
-
 big_data <- 
-  read.table(file.path(reports_path,
-                       "localPCA/big_data/chr1-30Z4A1A_localpca.csv"),
+  read.csv(file.path(reports_path,
+                       "localPCA/unpruned/chrZ_big_data.csv"),
              header=T)
 
 window_size=100
@@ -119,9 +118,9 @@ png(
 )
 
 big_data %>%
-  filter(LG=="chr30") %>% 
+  #filter(LG=="chr30") %>% 
   #filter(start>476442) %>% 
-  ggplot(aes(x=X2, y=PC1))+
+  ggplot(aes(x=n, y=PC1))+
   geom_point()+
   scale_x_continuous(
     label = axisdf$LG,

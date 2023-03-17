@@ -414,17 +414,23 @@ Test whether island-colonising silvereyes are larger
 summary(lm(body_PC1~colonisation, data=pheno))
 summary(lm(bill_PC1~colonisation, data=pheno))
 
-prior <- set_prior(class="b", "normal(0,10)")
+prior <- 
+  set_prior(class="b", 
+            "normal(0,10)")
 
 # Create a dummy variable for each population
 model <- 
-  brms::brm(body_PC1 ~ colonisation_label_brms + 
+  brm(body_PC1 ~ colonisation_label_brms + 
                      (1|pop),
-            #prior = prior,
+            prior = prior,
             chains = 4,
             iter = 4000,
             warmup = 1000,
             data = pheno)
+
+model
+
+plot(model)
 
 pheno %>%
   data_grid(colonisation_label_brms) %>%

@@ -1,0 +1,197 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Read and prep data
+```{r}
+big_data <- 
+  read.csv(file.path(reports_path,
+                       "localPCA/unpruned/big_data/bigdata.csv"),
+             header=T)
+
+order_chr <- as.character(seq(from = 5, to = 30))
+reference = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z")
+ref = factor(as.factor(reference), levels = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z"))
+big_data <- big_data[order(factor(as.factor(big_data$LG), levels = ref)),]
+
+big_data$n <- 1:nrow(big_data)
+
+axisdf <-
+  big_data %>%
+  group_by(LG) %>%
+  summarize(center = (max(n) + min(n)) / 2)
+```
+
+Plot MDS1 along chromosome
+```{r}
+mds1 <- 
+  big_data %>%
+  ggplot(aes(x=n, y=PC1, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values=rep(c("#348544", "#69bf5a"), 
+                                length(unique(big_data$LG))))+
+  labs(x = "\n", y="MDS1") +
+  geom_hline(yintercept=sd(big_data$PC1)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+
+mds2 <- 
+  big_data %>%
+  ggplot(aes(x=n, y=X2, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values=rep(c("#348544", "#69bf5a"), 
+                                length(unique(big_data$LG))))+
+  labs(x = "\n", y="MDS2") +
+  geom_hline(yintercept=sd(big_data$X2)*3, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$X2)*3, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+
+mds3 <- 
+  big_data %>%
+  ggplot(aes(x=n, y=X3, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values=rep(c("#348544", "#69bf5a"), 
+                                length(unique(big_data$LG))))+
+  labs(x = "\n", y="MDS3") +
+  geom_hline(yintercept=sd(big_data$X3)*3, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$X3)*3, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+
+mds4 <- 
+  big_data %>%
+  ggplot(aes(x=n, y=X4, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values=rep(c("#348544", "#69bf5a"), 
+                                length(unique(big_data$LG))))+
+  labs(x = "\n", y="MDS4") +
+  geom_hline(yintercept=sd(big_data$X4)*3, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$X4)*3, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+```
+
+Zoom in chr4A, chr29, chr30
+```{r}
+chr4A <-
+  big_data %>%
+  filter(LG=="chr4A") %>% 
+  ggplot(aes(x=n, y=PC1, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values="#3273a8")+
+  labs(x = "\n", y="MDS1") +
+  geom_hline(yintercept=sd(big_data$PC1)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+
+chr29 <-
+  big_data %>%
+  filter(LG=="chr29") %>% 
+  ggplot(aes(x=n, y=PC1, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values="#348544")+
+  labs(x = "\n", y="MDS1") +
+  geom_hline(yintercept=sd(big_data$PC1)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+
+chr30 <-
+  big_data %>%
+  filter(LG=="chr30") %>% 
+  ggplot(aes(x=n, y=PC1, col=LG))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$LG,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+  scale_color_manual(values="#69bf5a")+
+  labs(x = "\n", y="MDS1") +
+  geom_hline(yintercept=sd(big_data$PC1)*4, linetype="dashed")+
+    geom_hline(yintercept=-sd(big_data$PC1)*4, linetype="dashed")+
+  theme_classic() +
+  theme(
+    text = element_text(size=12),
+    legend.position = "none",
+    panel.border = element_blank())
+
+chr4A/chr29/chr30
+```
+
+Save plots
+```{r}
+ggsave(
+  "mds1.pdf",
+  mds1,
+  path = figures_path,
+  device = "pdf",
+  width = 12,
+  height = 4,
+  dpi = 400
+)
+```
+
