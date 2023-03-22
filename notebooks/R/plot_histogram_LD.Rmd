@@ -87,5 +87,17 @@ plot_LDdecay <- output_LD %>%
     axis.ticks = element_blank())+
   labs(x="", y="LD decay rate within 100kb\n")
 
-(plot_minLD + plot_LDmax) / (plot_LDavg + plot_LDdecay) + plot_annotation(tag_levels="A")
+plot_ld <- 
+  (plot_minLD + plot_LDmax) / (plot_LDavg + plot_LDdecay) +
+  plot_annotation(tag_levels="A")
 ```
+
+Save LD plots 
+```{r}
+ggsave(plot_ld,
+       filename = file.path(reports_path, 
+                            "plots", 
+                            "plot_LD_figS3.pdf"),
+       device="pdf",width = 15, height = 7)
+```
+

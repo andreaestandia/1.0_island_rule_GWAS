@@ -1,0 +1,118 @@
+---
+title: "get_stats_annotation.Rmd"
+author: "Andrea Estandia"
+date: "20/03/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r}
+source("./src/0.0_island_rule_source.R")
+```
+
+Read Repeatmasker output
+```{r}
+rm_df <- read.table(file.path(reports_path,
+                     "annotation",
+                    "repeatmasker",
+                    "RM_hints.out"))
+```
+ 
+Generate summary stats for repeatmasker
+```{r}
+repeats_by_chr <-
+  rm_df %>% 
+  group_by(V1) %>% 
+  summarise(n=n(),
+            median_length=median(V5-V4),
+            max_length=max(V5-V4),
+            min_length=min(V5-V4)) %>% 
+  arrange(desc(n))
+
+repeats_by_chr
+median(rm_df$V5-rm_df$V4)
+max(rm_df$V5-rm_df$V4)
+min(rm_df$V5-rm_df$V4)
+sd(rm_df$V5-rm_df$V4)
+
+plot_repeats_chr <- 
+  repeats_by_chr %>% 
+  ggplot(aes(x=fct_reorder(V1,n), y=n))+
+  geom_bar(stat="identity")+
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust=1,angle=45, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+        panel.grid.major = element_blank()) 
+
+plot_medianlength_chr <- 
+  repeats_by_chr %>% 
+  ggplot(aes(x=fct_reorder(V1,median_length), y=median_length))+
+  geom_bar(stat="identity")+
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust=1,angle=45, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+        panel.grid.major = element_blank()) 
+
+
+
+```
+
+Read evidence modeler data
+```{r}
+em_df <- read.table(file.path(reports_path,
+                     "annotation",
+                    "evidencemodeler",
+                    "output",
+                    "zosterops_augustus_all.gff3"))
+```
+
+```{r}
+cds_by_chr <-
+  rm_df %>% 
+  group_by(V1,V3) %>% 
+  summarise(n=n(),
+            median_length=median(V5-V4),
+            max_length=max(V5-V4),
+            min_length=min(V5-V4)) %>% 
+  arrange(desc(n))
+
+cds_by_chr %>% 
+  filter(V3=="CDS") %>% 
+  ungroup() %>% 
+  dplyr::select(V3, n) %>% 
+  rowSums(n, na.rm = T)
+```
+
+Save both datasets 
+```{r}
+list <- list(repeats_by_chr, cds_by_chr)
+names(list) <- c("repeats_by_chr", "cds_by_chr")
+
+for (sublist in 1:length(cds_by_chr)){
+  write.xlsx(cds_by_chr[sublist], 
+             file=file.path(reports_path,
+                            "annotation",
+                            "cds_by_chr.xlsx"), 
+             sheetName=paste(sublist), 
+             row.names=FALSE,
+             append=T)
+}
+```
+
+
+Check number of hits in terminal
+grep -c "<Iteration_iter-num>1<" zosterops_augustus_CDS_all.gff | head

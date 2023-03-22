@@ -69,6 +69,13 @@ pheno <-
 write.csv(pheno, file.path(data_path, "phenotypes/pheno_pca.csv"), row.names = F)
 ```
 
+How much of the variance does each loading explain?
+```{r}
+summary(body_pca)
+
+summary(bill_pca)
+```
+
 Plot trait data per population
 ```{r}
 plot_phenotypes <- function(dataset, trait, xaxis_name, color){

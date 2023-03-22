@@ -94,7 +94,9 @@ info_outliers <-
                      "GWAS",
                      "outliers",
                      "body_pc1_GWAS_outliers_full.csv"),
-           header = "auto") %>% 
+           header = "auto")
+info_outliers <-
+  info_outliers %>% 
   #filter those outliers above bonferroni cut-off
   filter(-log10(P)> -log10(0.01 / nrow(info_outliers)))
 
@@ -231,6 +233,56 @@ for (sublist in 1:length(list_summary_pop)){
                             "GWAS",
                             "outliers",
                             "body_PC1_outlier_genotype_per_pop.xlsx"), 
+             sheetName=paste(sublist), 
+             row.names=FALSE,
+             append=T)
+}
+```
+
+Read outliers chromosome 2 body PC1
+```{r}
+top_12_outliers_chr2 <- 
+  top_12_outliers %>% 
+  filter(Chromosome=="2")
+
+outliers_chr2 <- 
+  read_tsv(file.path(reports_path, 
+                       "annotation", 
+                        "outliers",
+                        "outliers_body_PC1.xml"),col_names = F) %>% 
+  separate(X1, c("chromosome", "positions"),sep = ":") %>% 
+  separate(positions, c("start", "stop"),sep = "-") %>% 
+  rename(functional_data=X9) %>% 
+  dplyr::select(chromosome, start, stop, functional_data)
+
+list_outliers <- list()
+for (number in seq(from = 100, to = 100000, by = 1000)) {
+  for (position in top_12_outliers_chr2$Position) {
+    for (start_pos in as.numeric(outliers_chr2$start)) {
+      stop <-
+        outliers_chr2 %>%
+        filter(start == start_pos) %>%
+        dplyr::select(stop) %>%
+        distinct(stop) %>%
+        slice(1) %>%
+        as.numeric()
+      if (between(position, start_pos + number, stop + number) == "TRUE") {
+        print("HIT!")
+        list_outliers[[as.character(position)]] <-
+          outliers_chr2 %>%
+          filter(start == start_pos)
+      }
+    }
+  }
+}
+
+
+for (sublist in 1:length(list_outliers)){
+  write.xlsx(list_outliers[sublist], 
+             file=file.path(reports_path,
+                            "GWAS",
+                            "outliers",
+                            "functional_info_gwas.xlsx"), 
              sheetName=paste(sublist), 
              row.names=FALSE,
              append=T)

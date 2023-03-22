@@ -3,6 +3,8 @@ title: "model_phenotypes.Rmd"
 author: "Andrea Estandia"
 date: "20/03/2023"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup}
@@ -118,11 +120,11 @@ pheno %>%
                               "~100000", 
                               "~150000"))+
   scale_fill_manual(values=c(
-                             "#e9c46a",
-                             "#f4a261",
-                             "#81559b",
-                             "#0a9396",
-                             "#e76f51"))+
+                             "#234551",
+                             "#ab5c94",
+                             "#e8c268",
+                             "#289C8F",
+                             "#e66e4f"))+
   theme(
     legend.position = "none",
     panel.grid.minor = element_blank(),
@@ -134,7 +136,7 @@ pheno %>%
     plot.title = element_text(face = "bold"),
     plot.subtitle = element_text(color = "#424242"))+
   labs(
-    title = "Posterior estimates of the group means",
+    title = "Posterior predictive draws of the group means",
     subtitle = "Body size (PC1)",
     x = "\nBody size (PC1)"
   )
@@ -151,10 +153,10 @@ pheno %>%
   theme_minimal() +
   scale_y_discrete(limits = c("Mainland",
                               "Tasmania",
-                              "French_Polynesia", 
                               "New_Zealand", 
                               "Chatham", 
                               "Norfolk_Island", 
+                              "French_Polynesia", 
                               "Heron_Island",
                               "Lord_Howe_Island",
                               "Grand_Terre",
@@ -163,19 +165,19 @@ pheno %>%
                               "Ouvea",
                               "Tanna",
                               "Efate",
+                              "Santo",
                               "Malekula",
                               "Pentecost",
-                              "Ambae",
                               "Ambrym",
-                              "Santo",
+                              "Ambae",
                               "Gaua",
                               "Vanua_Lava"),
                    labels= c("Australian mainland",
-                              "Tasmania",
-                              "French Polynesia", 
+                              "Tasmania", 
                               "New Zealand", 
                               "Chatham Island", 
                               "Norfolk Island", 
+                              "French Polynesia",
                               "Heron Island",
                               "Lord Howe Island",
                               "Grand Terre",
@@ -184,11 +186,11 @@ pheno %>%
                               "Ouvea",
                               "Tanna",
                               "Efate",
+                              "Espiritu Santo",
                               "Malekula",
                               "Pentecost",
-                              "Ambae",
                               "Ambrym",
-                              "Espiritu Santo",
+                              "Ambae",
                               "Gaua",
                               "Vanua Lava"))+
   scale_fill_manual(labels=c("Source",
@@ -198,11 +200,11 @@ pheno %>%
                             "~4000"),
                       name="Colonisation time",
                       values=c(
-                             "#e9c46a",
-                             "#f4a261",
-                             "#81559b",
-                             "#0a9396",
-                             "#e76f51"))+
+                             "#234551",
+                             "#ab5c94",
+                             "#e8c268",
+                             "#289C8F",
+                             "#e66e4f"))+
   theme(
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
@@ -268,11 +270,11 @@ pheno %>%
                               "~100000", 
                               "~150000"))+
   scale_fill_manual(values=c(
-                             "#e9c46a",
-                             "#f4a261",
-                             "#81559b",
-                             "#0a9396",
-                             "#e76f51"))+
+                             "#234551",
+                             "#ab5c94",
+                             "#e8c268",
+                             "#289C8F",
+                             "#e66e4f"))+
   theme(
     legend.position = "none",
     panel.grid.minor = element_blank(),
@@ -347,11 +349,11 @@ pheno %>%
                             "~4000"),
                       name="Colonisation time",
                       values=c(
-                             "#e9c46a",
-                             "#f4a261",
-                             "#81559b",
-                             "#0a9396",
-                             "#e76f51"))+
+                             "#234551",
+                             "#ab5c94",
+                             "#e8c268",
+                             "#289C8F",
+                             "#e66e4f"))+
   theme(
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
