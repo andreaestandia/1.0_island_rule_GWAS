@@ -255,6 +255,7 @@ outliers_chr2 <-
   rename(functional_data=X9) %>% 
   dplyr::select(chromosome, start, stop, functional_data)
 
+#Identify list of outliers that fall within 100kb from an annotated region
 list_outliers <- list()
 for (number in seq(from = 100, to = 100000, by = 1000)) {
   for (position in top_12_outliers_chr2$Position) {
@@ -287,5 +288,49 @@ for (sublist in 1:length(list_outliers)){
              row.names=FALSE,
              append=T)
 }
+```
+
+Prepare file to automatically search in annotation
+```{r}
+top_chr <-
+  info_outliers %>%
+  filter(-log10(P)> -log10(0.01 / nrow(info_outliers))) %>% 
+  arrange(P) %>% 
+  distinct(Chromosome) %>% 
+  dplyr::select(Chromosome) %>% 
+  slice(1:5)
+  
+df_total <- data.frame(
+      start_position=numeric(),
+      end_position=numeric(),
+      chromosome_name=character()
+    )
+  
+for (chr in as.character(top_chr$Chromosome)) {
+  t <- info_outliers %>%
+    filter(Chromosome == chr) %>%
+    filter(-log10(P) > -log10(0.01 / nrow(info_outliers))) %>%
+    arrange(P) %>%
+    filter(Position < median(Position) + 10000) %>%
+    filter(Position > median(Position) - 10000)
+  
+  df <-
+    data.frame(
+      start_position = min(t$Position),
+      end_position = max(t$Position),
+      chromosome_name = paste0("chromosome", chr)
+    )
+  
+  df_total <- rbind(df_total,df)
+  
+}
+
+write.table(df_total, 
+            file.path(reports_path,
+                      "GWAS",
+                      "outliers",
+                      "annotation",
+                      "positions4annotation_billPC1.csv"), row.names = F,
+            sep="\t", quote = FALSE)
 ```
 
