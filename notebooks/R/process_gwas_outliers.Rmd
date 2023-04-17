@@ -22,16 +22,16 @@ Read beagle file, remove allele columns, rename columns and remove extra
 numbers after sample_name
 ```{r}
 outlier <- 
-  read_tsv(file.path(reports_path, 
+  read.table(file.path(reports_path, 
                        "GWAS", 
                         "outliers",
-                        "body_pc1_outliers.beagle"),col_names = T) %>% 
+                        "body_pc1_outliers.beagle"),sep="\t", header=T) %>% 
   select(-c("allele1", "allele2")) %>% 
   as_tibble() %>% 
   pivot_longer(starts_with("Ind")) %>% 
   rename(sample_name=name) %>%
   rename(genotype=value) %>% 
-  mutate(sample_name=str_remove(sample_name, "\\_[^.]*$"))
+  mutate(sample_name=gsub("\\..*", "", sample_name))
 ```
 
 Read phenotype file with body size (PC1), pop info and genetic sex
