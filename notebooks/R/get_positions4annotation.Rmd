@@ -1,0 +1,117 @@
+---
+title: "get_positions4annotation.Rmd"
+author: "Andrea Estandia"
+date: "30/05/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Specify trait
+```{r}
+trait="tail"
+```
+
+```{r}
+LRTs <- 
+  fread(file.path(reports_path,
+                "GWAS",
+                "lrt",
+                paste0(trait, "_gwas_wholegenome_eigen2.lrt0.gz")),
+                header = T,
+                sep = "\t",
+                stringsAsFactors = F) %>%
+        mutate(Chromosome = str_replace(Chromosome, "chr", ""))
+      
+order_chr <- as.character(seq(from = 5, to = 30))
+reference = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z")
+ref = factor(as.factor(reference), levels = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z"))
+LRTs <- LRTs[order(factor(as.factor(LRTs$Chromosome), levels = ref)),]
+LRTs$n <- 1:nrow(LRTs)
+
+info_outliers <-
+  LRTs %>% 
+  #filter those outliers above bonferroni cut-off
+  filter(-log10(P)> -log10(0.001 / nrow(LRTs)))
+```
+
+Prepare file to automatically search in annotation
+```{r}
+# Function to merge nearby positions within a chromosome
+merge_positions <- function(df, threshold) {
+  merged_df <- data.frame()
+  current_group <- NULL
+  
+  for (i in 1:nrow(df)) {
+    pos <- df$Position[i]
+    
+    if (is.null(current_group)) {
+      current_group <- df[i, ]
+    } else {
+      if (pos - current_group$Position[nrow(current_group)] <= threshold) {
+        current_group <- rbind(current_group, df[i, ])
+      } else {
+        # Merge current group
+        merged_row <- data.frame(Position = c(min(current_group$Position), max(current_group$Position)))
+        merged_row <- cbind(merged_row, current_group[1, -(1:2)])
+        
+        # Append to merged dataframe
+        merged_df <- rbind(merged_df, merged_row)
+        
+        current_group <- df[i, ]
+      }
+    }
+  }
+  
+  # Add the last group
+  if (!is.null(current_group)) {
+    merged_row <- data.frame(Position = c(min(current_group$Position), max(current_group$Position)))
+    merged_row <- cbind(merged_row, current_group[1, -(1:2)])
+    
+    merged_df <- rbind(merged_df, merged_row)
+  }
+  
+  merged_df
+}
+
+# Specify the threshold for merging (10000 bp)
+threshold <- 10000
+
+# Group dataframe by Chromosome and apply merging within each group
+merged_df <- info_outliers %>%
+  group_by(Chromosome) %>%
+  do(merge_positions(., threshold)) %>% 
+  distinct(Position,.keep_all=TRUE)
+
+# Remove grouping information
+merged_df <- ungroup(merged_df) 
+
+# View the merged dataframe
+merged_df 
+  
+# Create a new dataframe with start_position, end_position, and chromosome_name
+df_total <- merged_df %>%
+  mutate(start_position = Position - 10000,
+         end_position = Position + 10000,
+         chromosome = paste0("chromosome",Chromosome)) %>%
+  select(start_position, end_position, chromosome)
+
+write.table(df_total, 
+            file.path(reports_path,
+                      "GWAS",
+                      "outliers",
+                      "annotation",
+                      paste0("positions4annotation_",trait,".csv")), row.names = F,
+            sep="\t", quote = FALSE)
+```

@@ -1,0 +1,174 @@
+---
+title: "model_inversions.Rmd"
+author: "Andrea Estandia"
+date: "09/06/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r}
+source("./src/0.0_island_rule_source.R")
+```
+
+
+```{r}
+df_inv<- 
+  read_csv(file.path(data_path, "localPCA/df_inv.csv"))
+```
+
+```{r}
+df_inv %>% 
+  ggplot(aes(x=as.factor(inv_chr27), y=body_PC1, col=body_PC1))+
+  geom_point()+
+  geom_violin(trim = FALSE) +
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  scale_color_viridis_c()+
+  #scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    #legend.position = "none",
+    legend.text = element_text(size=11),
+    legend.title = element_text())+
+  labs(x="\nCluster", y="Body size (PC1)\n", 
+       title="Chr 27\n")
+
+df_inv %>% 
+  ggplot(aes(x=as.factor(inv_chr28), y=body_PC1, col=body_PC1))+
+  geom_point()+
+  geom_violin(trim = FALSE) +
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  scale_color_viridis_c()+
+  #scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    #legend.position = "none",
+    legend.text = element_text(size=11),
+    legend.title = element_text())+
+  labs(x="\nCluster", y="Body size (PC1)\n", 
+       title="Chr 28\n")
+
+df_inv %>% 
+  ggplot(aes(x=as.factor(inv_chr29), y=body_PC1, col=body_PC1))+
+  geom_point()+
+  geom_violin(trim = FALSE) +
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  scale_color_viridis_c()+
+  #scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    #legend.position = "none",
+    legend.text = element_text(size=11),
+    legend.title = element_text())+
+  labs(x="\nCluster", y="Body size (PC1)\n", 
+       title="Chr 29\n")
+```
+
+```{r}
+df_inv %>% 
+  ggplot(aes(x=as.factor(k), y=as.factor(inv_chr29),col=region))+
+  geom_jitter()
+```
+
+```{r}
+df_inv_brms <-
+  df_inv %>% 
+  mutate(inv_chr27=as.factor(inv_chr27)) %>% 
+  mutate(inv_chr28=as.factor(inv_chr28)) %>% 
+  mutate(inv_chr29=as.factor(inv_chr29))
+  
+
+mod_chr27 <-
+  brm(body_PC1~inv_chr27+(1|pop),
+            chains = 4,
+            iter = 4000,
+            warmup = 1000,
+            data = df_inv_brms)
+
+mod_chr27_nopop <-
+  brm(body_PC1~inv_chr27,
+            chains = 4,
+            iter = 4000,
+            warmup = 1000,
+            data = df_inv_brms)
+
+mod_chr28 <-
+  brm(body_PC1~inv_chr28+(1|pop),
+            chains = 4,
+            iter = 4000,
+            warmup = 1000,
+            data = df_inv_brms)
+
+mod_chr29 <-
+  brm(body_PC1~inv_chr29+(1|pop),
+            chains = 4,
+            iter = 4000,
+            warmup = 1000,
+            data = df_inv_brms)
+```
+
+```{r}
+post_pop_chr27 <-
+df_inv_brms %>%
+  group_by(pop) %>% 
+  modelr::data_grid(inv_chr27) %>%
+  add_epred_draws(mod_chr27_nopop) %>%
+  ggplot(aes(x = .epred, y = pop, 
+             fill=inv_chr27)) +
+  stat_dist_halfeye()+
+  theme_minimal()
+
+post_pop_chr28 <-
+df_inv_brms %>%
+  group_by(pop) %>% 
+  modelr::data_grid(inv_chr28) %>%
+  add_epred_draws(mod_chr28) %>%
+  ggplot(aes(x = .epred, y = fct_reorder(pop, .epred), 
+             fill=inv_chr28)) +
+  stat_dist_halfeye()+
+  theme_minimal()
+
+post_pop_chr29 <-
+df_inv_brms %>%
+  group_by(pop) %>% 
+  modelr::data_grid(inv_chr29) %>%
+  add_epred_draws(mod_chr29) %>%
+  ggplot(aes(x = .epred, y = pop, 
+             fill=inv_chr27)) +
+  stat_dist_halfeye()+
+  theme_minimal()
+```
+

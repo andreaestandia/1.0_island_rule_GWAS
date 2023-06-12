@@ -31,14 +31,18 @@ body_pca <-
   princomp(~Wing+
              Tarsus+
              Tail+
-             HeadLength,
+             HeadLength+
+             Bill_length_posterior+
+             Bill_depth_anterior+
+             Bill_width_anterior,
            data=df,
            scores=TRUE,
            cor=TRUE,
            na.action=na.exclude)
 
 colnames(body_pca$scores) <- 
-  c("body_PC1", "body_PC2", "body_PC3", "body_PC4")
+  c("body_PC1", "body_PC2", "body_PC3", "body_PC4",
+    "body_PC5", "body_PC6", "body_PC7")
 
 bill_pca <-
   princomp(~Bill_length_posterior+
@@ -77,15 +81,17 @@ df <-
 ```
 
 ```{r}
-body_plot <- df %>%
+body_plot <- 
+  df %>%
   drop_na(body_PC1) %>% 
   mutate(pop=gsub("_", " ", pop)) %>%
   ggplot(aes(y = body_PC1,
              x = factor(pop, levels=c("Mainland",
                                             "Tasmania",
                                             "French Polynesia",
-                                            "New Zealand",
-                                            "Chatham",
+                                            "NZ North Island",
+                                            "NZ South Island",
+                                            "Chatham Island",
                                             "Norfolk Island",
                                             "Heron Island",
                                             "Lord Howe Island",
@@ -95,7 +101,7 @@ body_plot <- df %>%
                                             "Ouvea",
                                             "Tanna",
                                             "Efate",
-                                            "Santo",
+                                            "Espiritu Santo",
                                             "Malekula",
                                             "Pentecost",
                                             "Ambrym",
@@ -106,7 +112,8 @@ body_plot <- df %>%
   stat_summary(
     aes(group = pop),
     geom = "pointrange",
-    fun.data = mean_cl_boot,
+    fun.data = mean_cl_normal,
+    fun.args=list(conf.int=0.89),
     size = 1
   ) +
   geom_jitter(
@@ -118,7 +125,7 @@ body_plot <- df %>%
   scale_color_manual(values=c("#ad5e95", #recent col
                               "#e9c46a",#LHI
                               "#2a9d8f", #NC
-                              "#e76f51", #Heron
+                              "#c45539", #Heron
                               "#264653"))+ #Source
   theme_minimal() +
   theme(
@@ -126,7 +133,7 @@ body_plot <- df %>%
     panel.border = element_blank(),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(), 
-    axis.text.x = element_text(angle = 45, hjust=1, size=text_size, family = "ubuntu"),
+    axis.text.x = element_text(angle = 45, hjust=1, size=10, family = "ubuntu"),
     axis.text.y = element_text(size = text_size, family="ubuntu"),
     axis.title = element_text(size = text_size, family="ubuntu"),
     axis.title.x = element_blank(),

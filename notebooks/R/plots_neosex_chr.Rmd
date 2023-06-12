@@ -1,0 +1,244 @@
+---
+title: "plots_inversions.Rmd"
+author: "Andrea Estandia"
+date: "17/10/2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+params:
+  beagle: chr4A_1257754-chr4A_1261375.beagle
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Unzip beagle.gz window file if unzipped file does not exist already
+```{r}
+#if selecting individual windows
+beagle_file <- file.path(
+  reports_path,
+    "localPCA",
+    "unpruned",
+    "outliers",
+    "beagle_by_window",
+    "max2_merge10_filter5",
+    params$beagle)
+
+if (!file.exists(beagle_file)) {
+gunzip(paste0(beagle_file, ".gz"), remove=FALSE)
+}
+```
+
+Read beagle file, remove allele columns, rename columns and remove extra 
+numbers after sample_name
+```{r}
+outlier <- 
+  read.table(
+    file.path(
+      reports_path,
+      "localPCA",
+      "unpruned",
+      "outliers",
+      "beagle_by_window",
+      "max2_merge10_filter5",
+      params$beagle
+    ),
+    header = T
+  ) %>%
+  select(-c("allele1", "allele2")) %>%
+  as_tibble() %>%
+  pivot_longer(starts_with("Ind")) %>%
+  rename(sample_name = name) %>%
+  rename(genotype = value) %>%
+  mutate(sample_name = str_remove(sample_name, "\\.[^.]*$"))
+
+```
+
+Read phenotype file with body size (PC1), pop info and genetic sex
+```{r}
+pheno <-
+  read_tsv(file.path(data_path,
+                     "wgs",
+                     "lists",
+                     "body_pc1.tsv"),
+           col_names = FALSE) %>%
+  rename(sample_name = X1) %>%
+  rename(body_PC1 = X2)
+
+pop_info <- 
+  read_csv(file.path(data_path,
+                     "phenotypes",
+                     "phenotypes+SMC2+AE.csv")) %>%
+  rename(x = sample_name) %>%
+  rename(sample_name = id) %>%
+  select(sample_name, pop, region, latitude, longitude)
+
+geneticsex <-
+  read_csv(file.path(data_path, 
+                     paste0("phenotypes/geneticsex.csv"))) %>%
+  rename(id = Blood_Number)
+```
+
+Generate a vector repeating the genotypes AA, AB, and BB
+Paste vector to main beagle dataframe
+```{r}
+geno <-
+  rep(c("AA", "AB", "BB"),
+      times = length(outlier$sample_name) / 3)
+
+df <- 
+  cbind(outlier, geno)
+
+df <- df %>% 
+  filter(genotype>0.34) %>% 
+  group_by(sample_name, marker) %>% 
+  top_n(1, genotype)
+```
+
+Merge all datasets and separate column marker into chr and position
+```{r}
+df2 <- 
+  df %>% 
+  left_join(pop_info, by = "sample_name") %>% 
+  left_join(pheno, by = "sample_name") %>% 
+  separate(marker,into = c("chr", "position")) %>% 
+  mutate(position=as.numeric(position)) %>% 
+  unite("marker", chr:position, remove=FALSE)
+```
+
+Read covariance matrix for the window and population labels to give it row names
+```{r}
+label <- 
+  read.table(file.path(data_path,"localPCA/pop_label"))
+
+cov_mat <-
+  as.matrix(read.table(file.path(
+    reports_path,
+      "localPCA",
+      "unpruned",
+      "outliers",
+      "cov_by_window",
+      "max2_merge10_filter5",
+      paste0(gsub("\\..*","",params$beagle), ".cov")
+  )))
+
+```
+
+Decompose covariance matrix into its eigenvalues 
+```{r}
+#Do MDS on cov matrix
+mds.cor <- (1 - cov_mat) %>%
+  cmdscale(k=3, eig = TRUE)
+
+colnames(mds.cor$points) <- c("Dim.1", "Dim.2", "Dim.3")
+rownames(mds.cor$points) <-
+  label$V3
+
+#Do PCA on cov matrix
+pca<-eigen(cov_mat)
+
+pca.mat <-
+  as.matrix(pca$vectors %*% (diag(pca$values))^0.5)
+
+nPC <-
+  dim(pca$vectors)[2]
+
+col_PC <- 
+  vector(length=nPC)
+
+for (i in 1 : nPC) {col_PC[i] <-
+  paste0("PC",i)}
+
+#add column names
+colnames(pca.mat) <-
+  c(col_PC)
+
+#add row names
+rownames(pca.mat) <-
+  label$V3
+
+for (x in 1:4) {
+  nam <- 
+    as.character(paste0("var",x))
+    assign(nam, round(pca$values[x]*100/sum(pca$values[pca$values>=0]),2))
+}
+
+kmeans_res<-
+  kmeans(as.matrix(mds.cor$points[,1]), 
+                   c(min(mds.cor$points[,1]),
+                     mean(mds.cor$points[,1]),
+                     max(mds.cor$points[,1])))
+k_ss<-
+  round(kmeans_res$betweenss/kmeans_res$totss,3)
+
+k <- as.data.frame(kmeans_res$cluster)
+colnames(k) <- "k"
+
+pca.mat <- 
+  as.data.frame(pca.mat)
+
+pca.mat$pop <- 
+  label$V3
+
+pca.mat$sample_name <- 
+  label$V1
+
+pca.out <- 
+  pca.mat[,c(1:4)]
+
+clusters <- 
+  cbind(label, pca.out) %>%
+  select(-V3, -V4) %>% 
+  cbind(mds.cor$points) %>% 
+  cbind(k) %>% 
+  rename(id=V1) %>% 
+  rename(sample_name=V2) %>% 
+  rename(subregion=V5) %>%
+  left_join(geneticsex, by="id") %>% 
+  left_join(df2, by="sample_name")
+```
+
+Plot PC2 vs PC1 and visually determine how many clusters
+```{r}
+mds_plot <- clusters %>% 
+  filter(GeneticSex!="NA") %>% 
+  distinct(id, .keep_all = T) %>% 
+  ggplot(aes(x=PC1, y=PC2, col=as.factor(GeneticSex)))+
+  geom_point()+
+  theme_minimal() +
+  scale_color_manual(values = c("#264653", "#e76f51"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.position = "right",
+    legend.text = element_text(size=11),
+    legend.title = element_text())+
+  labs(x="\nMDS1", y="MDS2\n")+
+       #, 
+       #subtitle="Multidimensional Scaling\n")+
+  guides(color=guide_legend(title="Cluster"))
+
+ggsave(
+  mds_plot,
+  filename = file.path(reports_path, 
+                       "plots", 
+                       "inversions",
+                       paste0("neosex_chr.pdf")),
+  device = "pdf",width = 4.5, height=4
+)
+```

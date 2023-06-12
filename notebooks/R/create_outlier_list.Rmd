@@ -1,0 +1,62 @@
+---
+  title: "estimate_effect_size_gwas.Rmd"
+author: "Andrea Estandia"
+date: "17/10/2022"
+output:
+  pdf_document: default
+html_document:
+  df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Define trait
+```{r}
+trait ="bill_pc2"
+```
+
+Read data and create list with outliers
+```{r}
+LRTs <- 
+  fread(file.path(reports_path,
+                  "GWAS",
+                  "lrt",
+                  paste0(trait,"_gwas_wholegenome_eigen2.lrt0.gz")),
+        header = T,
+        sep = "\t",
+        stringsAsFactors = F) %>%
+  mutate(Chromosome = str_replace(Chromosome, "chr", ""))
+
+order_chr <- as.character(seq(from = 5, to = 30))
+reference = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z")
+ref = factor(as.factor(reference), levels = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z"))
+LRTs <- LRTs[order(factor(as.factor(LRTs$Chromosome), levels = ref)),]
+LRTs$n <- 1:nrow(LRTs)
+
+info_outliers <-
+  LRTs %>% 
+  #filter those outliers above bonferroni cut-off
+  filter(-log10(P)> -log10(0.001 / nrow(LRTs))) %>% 
+  dplyr::select(Chromosome, Position) %>% 
+  unite("p", Chromosome:Position, sep="_") %>%
+  mutate(p=paste0("chr",p))
+
+write.csv(info_outliers,
+          file.path(reports_path,
+                    "GWAS",
+                    "outliers",
+                    "list_outliers",
+                    paste0(trait,"_outliers.csv")), 
+          row.names = F)
+```

@@ -1,0 +1,145 @@
+---
+title: "estimate_effect_size_gwas.Rmd"
+author: "Andrea Estandia"
+date: "17/10/2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Read file
+```{r}
+lrt_file <- fread(
+  file.path(
+    reports_path,
+    "GWAS",
+    "lrt",
+    "body_pc1_gwas_wholegenome_eigen2.lrt0.gz"),
+  header = T,
+  sep = "\t",
+)
+```
+
+```{r}
+lrt_file %>% 
+  filter(beta< -1) %>% 
+  ggplot(aes(x=beta))+
+  geom_histogram()
+
+lrt_file %>% 
+  filter(P>0) %>% 
+  ggplot(aes(x=beta, y=-log10(P)))+
+  geom_point()
+```
+
+```{r}
+df <- fread("/home/zoo/sjoh4959/linear_results.assoc.linear.adjusted") %>% 
+  separate(SNP, c("A", "B")) %>% group_by(CHR) %>% arrange(B) %>% 
+  mutate(A=as.factor(A))
+
+df$n <- 1:nrow(df)
+
+axisdf <-
+  df %>%
+  group_by(A) %>%
+  summarize(center = (max(n) + min(n)) / 2)
+
+df %>%
+  group_by(A) %>% 
+  mutate(A=as.factor(A)) %>% 
+  filter(A=="chr2") %>% 
+  filter(UNADJ<0.002) %>% 
+  ggplot(aes(x=as.numeric(B), y=-log10(BONF)))+
+  geom_point()+
+  scale_x_continuous(
+    label = axisdf$A,
+    breaks = axisdf$center,
+    expand = c(0.01, 0.01)
+  ) +
+ # scale_color_manual(values=rep(c("#348544", "#69bf5a"), length(unique(df$A))))+
+  theme_classic() +
+  theme(
+    text = element_text(size=12, family="ubuntu"),
+    legend.position = "none", 
+    axis.text.x = element_blank(),
+    panel.border = element_blank())
+```
+
+```{r}
+info_outliers <-
+  fread(file.path(reports_path,
+                     "GWAS",
+                     "outliers",
+                     "body_PC1_outlier_full.csv"),
+           header = "auto")
+t <-
+  info_outliers %>% 
+  drop_na(beta,SE, Frequency, N)
+  #filter those outliers above bonferroni cut-off
+  filter(-log10(P)> -log10(0.5 / nrow(info_outliers))) 
+
+r <-
+  t %>% 
+  dplyr::select(beta, SE, N, Frequency)
+```
+
+```{r}
+hsquared <- function(beta, SE, N, Frequency){
+  num = 2*(beta^2)*Frequency*(1-Frequency)
+  den = num + 2*N*(SE^2)*Frequency*(1-Frequency)
+  hsq = num/den
+  return(hsq)
+}
+
+
+# Apply the 'hsquared' function to all rows using 'apply' and create a new column 'hsq'
+t$hsq <- apply(r, 1, function(row) {
+  beta <- row["beta"]
+  SE <- row["SE"]
+  N <- row["N"]
+  Frequency <- row["Frequency"]
+  
+  num <- 2 * (beta^2) * Frequency * (1 - Frequency)
+  den <- num + 2 * N * (SE^2) * Frequency * (1 - Frequency)
+  hsq <- num / den
+  
+  return(hsq)
+})
+
+# View the updated dataframe
+print(t)
+
+```
+
+```{r}
+b.est = t$beta
+f = t$Frequency
+b.s = b.est * sqrt(2*f*(1-f)) #scaled marginal effects
+
+h2.ind = sum(b.s^2)
+res = c()
+for(r.12 in c(0.99, 0.3, 0, -0.2)){
+  R = matrix(c(1, r.12, r.12, 1),2,2)
+  #regional heritability b.s^T R^-1 b.s
+  h2.reg = t(b.s) %*% solve(R) %*% b.s #solve(R) is the inverse of R
+  
+  res = rbind(res,c(r.12, h2.reg, h2.ind))
+}
+colnames(res) = c("r.12","h2.reg","h2.ind")
+res
+```
+

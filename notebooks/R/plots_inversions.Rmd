@@ -7,11 +7,9 @@ output:
   html_document:
     df_print: paged
 editor_options:
-  chunk_output_type: inline
+  chunk_output_type: console
 params:
-  beagle: chr30_1054214-chr30_1110750.beagle
-
-
+  beagle: chr4A_10675988-chr4A_11069953.beagle
 ---
   
 ```{r setup, echo=FALSE}
@@ -31,16 +29,9 @@ Unzip beagle.gz window file if unzipped file does not exist already
 beagle_file <- file.path(
   reports_path,
     "localPCA",
+    "unpruned",
+    "outliers",
     "beagle_by_window",
-    params$chr,
-    params$beagle)
-
-#if selecting a set of combined outlier windows 
-beagle_file <- file.path(
-  reports_path,
-    "localPCA",
-    "outlier_mds",
-    "beagle",
     params$beagle)
 
 if (!file.exists(beagle_file)) {
@@ -53,9 +44,10 @@ numbers after sample_name
 ```{r}
 outlier <- 
   read.table(file.path(reports_path, 
-                       "localPCA", 
-                        "outlier_mds",
-                        "beagle",
+                       "localPCA",
+                       "unpruned",
+                       "outliers",
+                       "beagle_by_window",
                        params$beagle), header=T) %>% 
   select(-c("allele1", "allele2")) %>% 
   as_tibble() %>% 
@@ -72,7 +64,7 @@ pheno <-
   read_tsv(file.path(data_path,
                      "wgs",
                      "lists",
-                     "body_PC1.tsv"),
+                     "body_pc1.tsv"),
            col_names = FALSE) %>%
   rename(sample_name = X1) %>%
   rename(body_PC1 = X2)
@@ -88,7 +80,7 @@ pop_info <-
 geneticsex <-
   read_csv(file.path(data_path, 
                      paste0("phenotypes/geneticsex.csv"))) %>%
-  rename(sample_name = Blood_Number)
+  rename(id = Blood_Number)
 ```
 
 Generate a vector repeating the genotypes AA, AB, and BB
@@ -127,8 +119,9 @@ cov_mat <-
   as.matrix(read.table(file.path(
     reports_path,
       "localPCA",
-      "outlier_mds",
-      "cov",
+      "unpruned",
+      "outliers",
+      "cov_by_window",
       paste0(gsub("\\..*","",params$beagle), ".cov")
   )))
 
@@ -176,7 +169,7 @@ for (x in 1:4) {
 kmeans_res<-
   kmeans(as.matrix(mds.cor$points[,1]), 
                    c(min(mds.cor$points[,1]), 
-                     median(mds.cor$points[,1]), 
+                     mean(mds.cor$points[,1]), 
                      max(mds.cor$points[,1])))
 k_ss<-
   round(kmeans_res$betweenss/kmeans_res$totss,3)
@@ -204,13 +197,14 @@ clusters <-
   rename(id=V1) %>% 
   rename(sample_name=V2) %>% 
   rename(subregion=V5) %>%
-  left_join(geneticsex) %>% 
+  left_join(geneticsex, by="id") %>% 
   left_join(df2, by="sample_name")
 ```
 
 Plot PC2 vs PC1 and visually determine how many clusters
 ```{r}
 mds_plot <- clusters %>% 
+  #filter(genotype>0.8) %>% 
   distinct(id, .keep_all = T) %>% 
   ggplot(aes(y=Dim.2, x=Dim.1, col=as.factor(k)))+
   geom_point()+
@@ -227,44 +221,54 @@ mds_plot <- clusters %>%
     legend.text = element_text(size=11),
     legend.title = element_text())+
   labs(x="\nMDS1", y="MDS2\n", 
-       title=paste0("Outlier window in ", gsub("\\_.*","",params$beagle), "\n"), 
-       subtitle="Multidimensional Scaling\n")+
+       title=paste0("Outlier window in ", gsub("\\_.*","",params$beagle), "\n"))+
+       #, 
+       #subtitle="Multidimensional Scaling\n")+
   guides(color=guide_legend(title="Cluster"))
-
-pca_plot <- clusters %>% 
-  distinct(id, .keep_all = T) %>% 
-  ggplot(aes(y=PC2, x=PC1, col=as.factor(k)))+
-  geom_point()+
-  theme_minimal() +
-  scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
-  theme(
-    panel.border = element_blank(),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(), 
-    axis.text.x = element_text(hjust=1, size=text_size),
-    axis.text.y = element_text(size = text_size),
-    axis.title = element_text(size = text_size),
-    legend.position = "right",
-    legend.text = element_text(size=11),
-    legend.title = element_text())+
-  labs(x="\nPC1", y="PC2\n",
-       subtitle="PCA\n")+
-  guides(color=guide_legend(title="Cluster"))
-
-plot_mds_pca <- 
-  mds_plot+pca_plot+plot_layout(guides = "collect")
+# 
+# pca_plot <- clusters %>% 
+#   distinct(id, .keep_all = T) %>% 
+#   ggplot(aes(y=PC2, x=PC1, col=as.factor(k)))+
+#   geom_point()+
+#   theme_minimal() +
+#   scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
+#   theme(
+#     panel.border = element_blank(),
+#     panel.grid.major = element_blank(),
+#     panel.grid.minor = element_blank(), 
+#     axis.text.x = element_text(hjust=1, size=text_size),
+#     axis.text.y = element_text(size = text_size),
+#     axis.title = element_text(size = text_size),
+#     legend.position = "right",
+#     legend.text = element_text(size=11),
+#     legend.title = element_text())+
+#   labs(x="\nPC1", y="PC2\n",
+#        subtitle="PCA\n")+
+#   guides(color=guide_legend(title="Cluster"))
+# 
+# plot_mds_pca <- 
+#   mds_plot+pca_plot+plot_layout(guides = "collect")
+# 
+# ggsave(
+#   plot_mds_pca,
+#   filename = file.path(reports_path, 
+#                        "plots", 
+#                        paste0("mds_vs_pca_",params$beagle,".pdf")),
+#   device = "pdf",width = 10, height=5
+# )
 
 ggsave(
-  plot_mds_pca,
+  mds_plot,
   filename = file.path(reports_path, 
                        "plots", 
-                       paste0("mds_vs_pca_",params$beagle,".pdf")),
-  device = "pdf",width = 10, height=5
+                       "inversions",
+                       paste0("mds_",params$beagle,".pdf")),
+  device = "pdf",width = 6, height=5
 )
 ```
 
 ```{r}
-plot_mds_pca
+clusters %>% filter(k=="2") %>% filter(region=="New_Caledonia") %>% dplyr::distinct(sample_name)
 ```
 
 ```{r}
@@ -361,7 +365,8 @@ df_map$percentage_cluster3 <-
 write_csv(df_map,
           file.path(reports_path, 
                    "localPCA", 
-                   "outlier_mds", 
+                   "unpruned",
+                   "outliers",
                    paste0(params$beagle,"_summary_alleles_cluster.csv")))
 ```
 
@@ -478,12 +483,52 @@ ggsave(
   chartpie,
   filename = file.path(reports_path, 
                        "plots", 
+                       "inversions",
                        paste0("chartpie_",params$beagle,".pdf")),
   device = "pdf",width = 10, height=5
 )
 ```
 
 
+```{r}
+plot_violin<- 
+  clusters %>%
+  group_by(sample_name) %>%
+  #dplyr::filter(region=="New_Caledonia") %>% 
+  top_n(1, genotype) %>% 
+  drop_na(body_PC1) %>%
+  filter(genotype>0.8) %>% 
+  ggplot(aes(y = body_PC1, x = as.factor(k), col = as.factor(k))) +
+  geom_violin(trim = FALSE) +
+  stat_summary(aes(y = body_PC1),
+               fun.data = data_summary,
+               geom = "pointrange",
+               shape = 1) +
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.title = element_text(),
+    legend.position = "none",
+        panel.grid.major = element_blank()) +
+  scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a")) +
+  labs(title = "Inversion Chr27 / 959812-1052666\n",
+       y = "Body size (PC1)\n", x = "\nGenotype")
+
+ggsave(
+  plot_violin,
+  filename = file.path(reports_path, 
+                       "plots", 
+                       "inversions",
+                       paste0("violin",params$beagle,".pdf")),
+  device = "pdf",width = 5, height=3
+)
+```
 
 <!-- ```{r} -->
 <!-- positions <-  -->

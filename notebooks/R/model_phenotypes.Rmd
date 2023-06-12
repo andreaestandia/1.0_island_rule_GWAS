@@ -89,6 +89,11 @@ model <-
             data = pheno)
 
 #Save model
+saveRDS(model_body_null, 
+        file.path(reports_path, 
+                         "brms", 
+                         "brms_model_null.RDS"))
+
 saveRDS(model, 
         file.path(reports_path, 
                          "brms", 
@@ -103,7 +108,7 @@ loo_compare(model$loo,model_body_null$loo)
 post_col <-
 pheno %>%
   group_by(pop) %>% 
-  data_grid(colonisation_label_brms) %>%
+  modelr::data_grid(colonisation_label_brms) %>%
   add_epred_draws(model) %>%
   ggplot(aes(x = .epred, y = colonisation_label_brms, 
              fill=colonisation_label_brms)) +
@@ -145,7 +150,7 @@ pheno %>%
 post_pop <-
 pheno %>%
   group_by(pop) %>% 
-  data_grid(colonisation_label_brms) %>%
+  modelr::data_grid(colonisation_label_brms) %>%
   add_epred_draws(model) %>%
   ggplot(aes(x = .epred, y = pop, 
              fill=colonisation_label_brms)) +
@@ -245,6 +250,14 @@ model_bill <-
             data = pheno)
 
 saveRDS(model_bill, "brms_model_bill.RDS")
+saveRDS(model_bill, 
+        file.path(reports_path, 
+                         "brms", 
+                         "brms_model_bill.RDS"))
+saveRDS(model_bill_null, 
+        file.path(reports_path, 
+                         "brms", 
+                         "brms_model_bill_null.RDS"))
 
 model_bill$loo <- loo(model_bill, moment_match = TRUE)
 model_bill_null$loo <- loo(model_bill_null)
