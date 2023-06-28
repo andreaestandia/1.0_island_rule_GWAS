@@ -29,7 +29,6 @@ You can see the folder structure below
 │       ├── 0_gcta.sh
 │       └── stratify_snps.R
 ├── 8_local_pca
-│   ├── 0.0_fig3.Rmd
 │   ├── 0_cov_by_window_chr.sh
 │   ├── 1_mds.Rmd
 │   ├── 2_local_pca_select_clusters.Rmd
