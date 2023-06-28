@@ -2,13 +2,10 @@
 
 This repository contains the code necessary to reproduce all analyses in the folder `pipeline`
 
+You can see the folder structure below
+
 ```bash
-├── 10_brms
-│   ├── model_inversions.Rmd
-│   └── model_phenotypes.Rmd
-├── 11_miscellaneous
-│   └── plot_map_pheno_chart.Rmd
-├── 1_qc
+|── 1_qc
 │   └── 0_qc.sh
 ├── 2_raw2bam
 │   └── 0_snp_calling.sh
@@ -58,7 +55,12 @@ This repository contains the code necessary to reproduce all analyses in the fol
 │   └── 6_blastx
 │       ├── 0_create_job_files.sh
 │       └── 1_launch_jobs.sh
-└── tree.md
+├── 10_brms
+│   ├── model_inversions.Rmd
+│   └── model_phenotypes.Rmd
+├── 11_miscellaneous
+    └── plot_map_pheno_chart.Rmd
+
 ```
 
 Raw data, intermediate files and final output will be uploaded to Figshare and a link will be made available soon.
