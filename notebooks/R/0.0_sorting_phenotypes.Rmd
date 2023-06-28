@@ -109,7 +109,7 @@ plot_phenotypes <- function(dataset, trait, xaxis_name, color){
     return(plot)
 }
 
-trait_list = colnames(pheno)[c(14:17, 24, 29:30)]
+trait_list = colnames(pheno)[c(15:21, 33:37)]
 output_plot <- list()
 for (trait in trait_list){
   output_plot[[trait]] <- plot_phenotypes(pheno, trait, as.character(trait), color="#3d3d3d")

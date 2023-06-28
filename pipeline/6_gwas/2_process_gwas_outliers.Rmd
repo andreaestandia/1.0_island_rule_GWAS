@@ -1,5 +1,5 @@
 ---
-title: "process_gwas_outliers.Rmd"
+title: "2_process_gwas_outliers.Rmd"
 author: "Andrea Estandia"
 date: "16/03/2023"
 output: html_document
@@ -45,8 +45,8 @@ Read phenotype file with body size (PC1), pop info and genetic sex
 ```{r}
 pheno <-
   read_tsv(file.path(data_path,
-                     "wgs",
-                     "lists",
+                     "GWAS",
+                     "phenotypes",
                       paste0(trait, ".tsv")),
            col_names = FALSE) %>%
   rename(sample_name = X1) %>%
@@ -54,13 +54,14 @@ pheno <-
 
 geneticsex <-
   read_csv(file.path(data_path, 
-                     paste0("phenotypes/geneticsex.csv"))) %>%
+                     paste0("sample_info",
+                            "geneticsex.csv"))) %>%
   rename(id = Blood_Number)
 
 pop_info <- 
   read_csv(file.path(data_path,
-                     "phenotypes",
-                     "phenotypes+SMC2+AE.csv")) %>%
+                     "sample_info",
+                     "curated_dataset.csv")) %>%
   rename(x = sample_name) %>%
   rename(sample_name = id) %>%
   rename(id=x) %>% 
@@ -95,6 +96,7 @@ df2 <-
   unite("marker", chr:position, remove=FALSE)
 ```
 
+Load association output, apply a threshold and select the top 1 and top12
 ```{r}
 LRTs <- 
   fread(file.path(reports_path,
@@ -114,7 +116,7 @@ ref = factor(as.factor(reference), levels = c(c("1", "1A", "2", "3", "4", "4A"),
 LRTs <- LRTs[order(factor(as.factor(LRTs$Chromosome), levels = ref)),]
 LRTs$n <- 1:nrow(LRTs)
 
-bonf=-log10(0.001 / nrow(LRTs))
+bonf=-log10(0.0001 / nrow(LRTs))
 
 info_outliers <-
   LRTs %>% 
@@ -132,7 +134,7 @@ top_12_outliers <-
   slice(1:12)
 ```
 
-Plot top outlier
+Plot top outlier - Fig S3 C and D
 ```{r}
 top1_pos <- top_1_outliers$Position
 top1_major <- paste0(top_1_outliers$Major,top_1_outliers$Major)
@@ -167,7 +169,6 @@ body_outlier_top1 <-
     axis.text.y = element_text(size = text_size, family="ubuntu"),
     axis.title = element_text(size = text_size, family="ubuntu"),
     legend.title = element_text(family="ubuntu"),
-    #legend.position = "none",
         panel.grid.major = element_blank()) +
   scale_x_discrete(labels=c("AA" = top1_major, "AB" = top1_majorminor,
                               "BB" = top1_majorminor))+
@@ -178,35 +179,7 @@ body_outlier_top1 <-
        y = "Bill size (PC1)\n", x = "\nGenotype", family="ubuntu")
 ```
 
-Calculate the effect in body size 
-```{r}
-df2 %>% 
-  drop_na(body_PC1) %>%
-  filter(genotype>0.34) %>% 
-  filter(position==top1_pos) %>% 
-  group_by(geno,subspecies) %>% 
-  summarise(median(body_PC1, na.rm=T),
-            max(body_PC1, na.rm=T),
-            min(body_PC1, na.rm=T),
-            sd(body_PC1, na.rm=T),
-            var(body_PC1, na.rm=T))
-```
-
-Explore body size in the two Vanuatu subsp that have the mutations on chr2
-```{r}
-view(df2 %>% 
-  drop_na(body_PC1) %>%
-  filter(genotype>0.34) %>% 
-  filter(position==top1_pos) %>% 
-  group_by(geno,subspecies) %>% 
-  summarise(median(body_PC1, na.rm=T),
-            max(body_PC1, na.rm=T),
-            min(body_PC1, na.rm=T),
-            sd(body_PC1, na.rm=T),
-            var(body_PC1, na.rm=T)))
-```
-
-
+Generate figures S4 and S6
 ```{r}
 list_plots <- list()
 
@@ -240,7 +213,6 @@ for (i in unique(info_outliers$Position)){
     axis.text.y = element_text(size = text_size, family="ubuntu"),
     axis.title = element_text(size = text_size, family="ubuntu"),
     legend.title = element_text(family="ubuntu"),
-    #legend.position = "none",
         panel.grid.major = element_blank()) +
   scale_x_discrete(labels=c("AA" = top1_major, "AB" = top1_majorminor,
                               "BB" = top1_majorminor))+
@@ -265,34 +237,6 @@ ggsave(
 )
 ```
 
-
-```{r}
-list_summary_pop <- list()
-
-for (i in unique(info_outliers$Position)){
-  tmp <- df2 %>%
-      filter(position == i)
-  list_summary_pop[[as.character(i)]] <- 
-  df2 %>%
-  filter(position == i) %>% 
-  drop_na(body_PC1) %>%
-  filter(genotype>0.34) %>% 
-  group_by(pop,geno,chr,position) %>% 
-  summarise(n=n())
-}
-
-for (sublist in 1:length(list_summary_pop)){
-  write.xlsx(list_summary_pop[sublist], 
-             file=file.path(reports_path,
-                            "GWAS",
-                            "outliers",
-                            "body_PC1_outlier_genotype_per_pop.xlsx"), 
-             sheetName=paste(sublist), 
-             row.names=FALSE,
-             append=T)
-}
-```
-
 Classify as de novo or SGV
 ```{r}
 # Function to classify mutations
@@ -312,8 +256,6 @@ classify_mutations <- function(df) {
 
 # Classify mutations in each dataframe
 classified_dataframes <- lapply(list_summary_pop, classify_mutations)
-
-#count how many SNPs are de novo and how many are due to SGV
 
 # Define the column name you want to extract
 column_name <- "classification"
@@ -337,10 +279,6 @@ for (df_name in names(classified_dataframes)) {
 print(first_values)
 
 table(first_values) 
-#body size: denovo 29 / sgv 48 / total 77
-#bill size: denovo 56 / sgv 153 / total 209 
-#body size no vanuatu: 10 sgv
-#tarsus: denovo 3
 
 # Example: Printing the classified dataframes
 for (i in seq_along(classified_dataframes)) {
@@ -354,7 +292,8 @@ for (sublist in 1:length(classified_dataframes)){
              file=file.path(reports_path,
                             "GWAS",
                             "outliers",
-                            "body_PC1_classified_denovo_sgv.xlsx"), 
+                            "sgv_denovo",
+                            "body_PC1_denovo_sgv.xlsx"), 
              sheetName=paste(sublist), 
              row.names=FALSE,
              append=T)
@@ -430,117 +369,3 @@ write.table(df_total,
                       paste0("positions4annotation_",trait,".csv")), row.names = F,
             sep="\t", quote = FALSE)
 ```
-
-Plot beta
-```{r}
-LRTs %>%
-  filter(-log10(P)>bonf)%>%
-  mutate(h=beta+1.96*SE) %>%
-  filter(h<1) %>%
-  ggplot(aes(x=beta,y=SE))+
-  geom_point()
-
-LRTs %>%
-  mutate(h=beta+1.96*SE) %>%
-  mutate(u=beta-1.96*SE) %>%
-  filter(h>1) %>%
-  filter(u<1) 
-
-df2 %>%
-  filter(position == "72302088") %>% 
-  drop_na(body_PC1) %>%
-  filter(genotype>0.34) %>% 
-  ggplot(aes(y = body_PC1, x = geno, col = geno)) +
-  geom_violin(trim = FALSE) +
-  stat_summary(
-    aes(group = geno),
-    geom = "pointrange",
-    fun.data = mean_cl_normal,
-    fun.args=list(conf.int=0.89),
-    size = 1)+
-  geom_jitter(width = 0.05,
-              height = 0.05,
-              alpha = 0.8,
-              size=2) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(hjust=1, size=text_size, family = "ubuntu"),
-    axis.text.y = element_text(size = text_size, family="ubuntu"),
-    axis.title = element_text(size = text_size, family="ubuntu"),
-    legend.title = element_text(family="ubuntu"),
-    #legend.position = "none",
-        panel.grid.major = element_blank())
-```
-
-<!-- Read outliers chromosome 2 body PC1 -->
-<!-- ```{r} -->
-<!-- top_12_outliers_chr2 <-  -->
-<!--   top_12_outliers %>%  -->
-<!--   filter(Chromosome=="2") -->
-
-<!-- outliers_chr2 <-  -->
-<!--   read_tsv(file.path(reports_path,  -->
-<!--                        "annotation",  -->
-<!--                         "outliers", -->
-<!--                         "outliers_bill_PC1.xml"),col_names = F) %>%  -->
-<!--   separate(X1, c("chromosome", "positions"),sep = ":") %>%  -->
-<!--   separate(positions, c("start", "stop"),sep = "-") %>%  -->
-<!--   rename(functional_data=X9) %>%  -->
-<!--   dplyr::select(chromosome, start, stop, functional_data) -->
-
-<!-- #Identify list of outliers that fall within 100kb from an annotated region -->
-<!-- list_outliers <- list() -->
-<!-- for (number in seq(from = 100, to = 100000, by = 1000)) { -->
-<!--   for (position in top_12_outliers_chr2$Position) { -->
-<!--     for (start_pos in as.numeric(outliers_chr2$start)) { -->
-<!--       stop <- -->
-<!--         outliers_chr2 %>% -->
-<!--         filter(start == start_pos) %>% -->
-<!--         dplyr::select(stop) %>% -->
-<!--         distinct(stop) %>% -->
-<!--         slice(1) %>% -->
-<!--         as.numeric() -->
-<!--       if (between(position, start_pos + number, stop + number) == "TRUE") { -->
-<!--         print("HIT!") -->
-<!--         list_outliers[[as.character(position)]] <- -->
-<!--           outliers_chr2 %>% -->
-<!--           filter(start == start_pos) -->
-<!--       } -->
-<!--     } -->
-<!--   } -->
-<!-- } -->
-
-
-<!-- for (sublist in 1:length(list_outliers)){ -->
-<!--   write.xlsx(list_outliers[sublist],  -->
-<!--              file=file.path(reports_path, -->
-<!--                             "GWAS", -->
-<!--                             "outliers", -->
-<!--                             "functional_info_gwas_bill.xlsx"),  -->
-<!--              sheetName=paste(sublist),  -->
-<!--              row.names=FALSE, -->
-<!--              append=T) -->
-<!-- } -->
-<!-- ``` -->
-
-<!-- qqplot -->
-<!-- ```{r} -->
-<!-- info_outliers <- info_outliers %>% arrange(desc(P)) -->
-<!-- info_outliers$p_theory <- sort(-log10(ppoints(length(info_outliers$P))), decreasing = T)#theoretical -->
-
-<!-- info_outliers %>%  -->
-<!--   ggplot(aes(y = -log10(P), x=p_theory)) + -->
-<!--   geom_point() + -->
-<!--   geom_smooth(method="lm", -->
-<!--               col="black") -->
-
-<!-- info_outliers %>%  -->
-<!--   #filter(P<0.001) %>%  -->
-<!--   ggplot(aes(sample= -log10(P))) + -->
-<!--   stat_qq()+stat_qq_line() -->
-
-
-<!-- qqplot(-log10(ppoints(p)), -log10(info_outliers$P), xlab = "theoretical",ylab = "obs'd", main = "Q-Q Plot for -log10 Pval", cex = 0.5, pch = 3) -->
-<!-- abline(0, 1, col = "red") -->
-<!-- ``` -->
-

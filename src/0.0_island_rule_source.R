@@ -14,9 +14,9 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(dplyr)
   library(xlsx)
-  library(ggpubr)
+  #library(ggpubr)
   library(patchwork)
-  library(ggannotate)
+  #library(ggannotate)
   #library(bookdown)
   #library(sysfonts)
   #library(kableExtra)
@@ -24,13 +24,22 @@ suppressPackageStartupMessages({
   library(stringr)
   #library(biomaRt)
   #library(units)
-  #library(rnaturalearth)
+  library(rnaturalearth)
+  library(scatterpie)
+  library(data.table)
   library(ggrepel)
+  library(scatterpie)
   library(data.table)
   library(lostruct)
   library(plotly)
   library(R.utils)
   library(RColorBrewer)
+  library(brms)
+  library(tidybayes)
+  library(grid)
+  library(gridExtra)
+  library(data.table)
+
 })
 
 text_size=12
@@ -41,6 +50,8 @@ text_size=12
 data_path <- file.path(getwd(), "data")
 figures_path <- file.path(getwd(), "reports", "plots")
 reports_path <- file.path(getwd(), "reports")
+analysis_path <- file.path(getwd(), "analysis")
+
 subset_pheno_path <- file.path(getwd(), "data", "phenotypes", "subset")
 subset_ind_path <- file.path(getwd(), "data", "wgs", "lists")
 
@@ -55,6 +66,13 @@ if (!dir.exists(figures_path)) {
 # --------------------------------------------------------------------------
 # FUNCTIONS
 # --------------------------------------------------------------------------
+
+data_summary <- function(x) {
+  m <- mean(x)
+  ymin <- m - sd(x)
+  ymax <- m + sd(x)
+  return(c(y = m, ymin = ymin, ymax = ymax))
+}
 
 firstup <- function(x) {
   substr(x, 1, 1) <- toupper(substr(x, 1, 1))

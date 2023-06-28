@@ -1,13 +1,7 @@
-# The genetic basis of the island rule in birds
+# **Standing genetic variation and** ***de novo*** **mutations underlie parallel evolution of island bird phenotypes**
 
-This repository contains the code necessary to reproduce all analyses. 
+This repository contains the code necessary to reproduce all analyses in the folder `pipeline`
 
-- Within `docs/1.0_methods.md`  you will find the full pipeline and where I’ve run each script (whether in *ARC*, the University of Oxford cluster that uses SLURM or *Nesoi*, our local server) . 
+Raw data, intermediate files and final output will be uploaded to Figshare and a link will be made available soon.
 
-- The folder `analysis` contains specific scripts for each of the analyses. `notebooks/R` contains R scripts to reproduce the figures. 
-
-- `src` contains custom and other scripts that are used in `1.0_methods.md`.
-
-Raw data, intermediate files and final output will be uploaded to Dryad and a link will be made available soon.
-
-Feel free to drop me an email (andrea.estandia@biology.ox.ac.uk) if you have any questions.
+Feel free to drop me an email (andrea.estandia@biology.ox.ac.uk) if you have any questions.	

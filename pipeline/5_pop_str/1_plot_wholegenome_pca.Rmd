@@ -1,0 +1,244 @@
+---
+title: "plot_wholegenome_pca"
+author: "Andrea Estandia"
+date: "10/03/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Open cov 
+```{r}
+label <- 
+  read.table(file.path(data_path,"localPCA/pop_label"))
+
+cov_mat <-
+  as.matrix(read.table(file.path(
+    reports_path,
+      "PCAngsd",
+      "wholegenome_pca_out.cov"
+  )))
+```
+
+Do MDS and PCA, then kmeans 
+```{r}
+#Do MDS on cov matrix
+mds.cor <- (1 - cov_mat) %>%
+  cmdscale(k=3, eig = TRUE)
+
+colnames(mds.cor$points) <- c("Dim.1", "Dim.2", "Dim.3")
+rownames(mds.cor$points) <-
+  label$V3
+
+#Percentage of the variance explained by each dimension
+df_var_mds <- 
+  as.data.frame(round(mds.cor$eig*100/sum(mds.cor$eig),1)/100)
+
+rownames(df_var_mds) <- 
+  paste0("Dim.", seq(1:dim(df_var_mds)[1]))
+df_var_mds$PC <- rownames(df_var_mds)
+colnames(df_var_mds) <- c("variance_explained", "Dim")
+
+#Do PCA on cov matrix
+pca <-
+  eigen(cov_mat)
+
+pca.mat <-
+  as.matrix(pca$vectors %*% (diag(pca$values))^0.5)
+
+nPC <-
+  dim(pca$vectors)[2]
+
+col_PC <- 
+  vector(length=nPC)
+
+for (i in 1 : nPC) {col_PC[i] <-
+  paste0("PC",i)}
+
+#add column names
+colnames(pca.mat) <-
+  c(col_PC)
+
+#add row names
+rownames(pca.mat) <-
+  label$V3
+
+#Calculate variance explained by each of the first four components
+
+df_var_pca <- 
+  as.data.frame(round(pca$values*100/sum(pca$values),1)/100) 
+  
+
+rownames(df_var_pca) <- 
+  paste0("PC", seq(1:dim(df_var_pca)[1]))
+df_var_pca$PC <- rownames(df_var_pca)
+colnames(df_var_pca) <- c("variance_explained", "PC")
+```
+
+Calculate Kmeans
+```{r}
+kmeans_res<-
+  kmeans(as.matrix(mds.cor$points[,1]), 
+                   c(min(mds.cor$points[,1]), 
+                     median(mds.cor$points[,1]), 
+                     max(mds.cor$points[,1])))
+k_ss<-
+  round(kmeans_res$betweenss/kmeans_res$totss,3)
+
+k <- as.data.frame(kmeans_res$cluster)
+colnames(k) <- "k"
+```
+
+Organise and create dataframe with MDS and PCA
+```{r}
+pca.mat <- 
+  as.data.frame(pca.mat)
+
+pca.mat$pop <- 
+  label$V3
+
+pca.mat$sample_name <- 
+  label$V1
+
+pca.out <- 
+  pca.mat[,c(1:4)]
+
+clusters <- 
+  cbind(label, pca.out) %>%
+  select(-V3, -V4) %>% 
+  cbind(mds.cor$points) %>% 
+  cbind(k) %>% 
+  rename(id=V1) %>% 
+  rename(sample_name=V2) %>% 
+  rename(subregion=V5)
+```
+
+Plot variance explained
+```{r}
+df_var_mds$Dim <- factor(df_var_mds$Dim, levels = df_var_mds$Dim)
+
+plot_mds <-
+  df_var_mds %>% 
+  slice(1, 2:10) %>% 
+  ggplot(aes(x=as.factor(Dim), y=variance_explained))+
+  geom_bar(stat='identity')+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size))+
+  labs(x="\nDim", y="Variance explained\n", title="MDS",
+       subtitle="Variance explained by each Dim\n")
+
+df_var_pca$PC <- factor(df_var_pca$PC, levels = df_var_pca$PC)
+
+plot_pca <-
+  df_var_pca %>% 
+  slice(1, 2:10) %>% 
+  ggplot(aes(x=as.factor(PC), y=variance_explained))+
+  geom_bar(stat='identity')+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size))+
+  labs(x="\nPCA", y="Variance explained\n", title="PCA",
+       subtitle="Variance explained by each PC\n")
+
+plot_mds/plot_pca
+```
+
+
+Plot PC1 vs PC2
+```{r}
+plot_pc1 <-
+  clusters %>%
+  ggplot(aes(x = Dim.1, 
+             y = Dim.2, 
+             col = subregion)) +
+  stat_ellipse(aes(
+    x = Dim.1,
+    y = Dim.2,
+    group = k
+  ),
+  type = "norm") +
+  geom_point() +
+  scale_color_manual(values = c(
+    "#6a994e",
+    "#219ebc",
+    "#ff595e",
+    "#d62828",
+    "#ffb703",
+    "#fb8b24"
+  )) +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    axis.ticks.x.bottom = element_blank(),
+    axis.ticks.y.left = element_blank()
+  ) +
+  labs(x = "\nDim.1 (43.9%)",
+       y = "Dim.2 (10.1%)\n",
+       title = "MDS based on whole-genome data")
+
+plot_pc2 <-
+  clusters %>%
+  ggplot(aes(x = PC1,
+             y = PC2,
+             col = subregion)) +
+  stat_ellipse(aes(
+    x = PC1,
+    y = PC2,
+    col=subregion,
+    group = k
+  ),
+  type = "norm",
+  linetype = 2) +
+  geom_point() +
+  scale_color_manual(values = c(
+    "#6a994e",
+    "#219ebc",
+    "#ff595e",
+    "#d62828",
+    "#ffb703",
+    "#fb8b24"
+  )) +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    axis.ticks.x.bottom = element_blank(),
+    axis.ticks.y.left = element_blank()
+  ) +
+  labs(x = "\nPC1 (20.8%)",
+       y = "PC2 (6.3%)\n",
+       title = "PCA based on whole-genome data")+
+  guides(color=guide_legend(title="Region"))
+
+plot_pc2
+
+```
+

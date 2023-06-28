@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#SBATCH --nodes=1
+#SBATCH --mem=64000
+#SBATCH --time=900:00:00
+#SBATCH --job-name=pru_LD
+#SBATCH --partition=long
+#SBATCH --output=ld_%A_%a.out
+#SBATCH --error=ld_%A_%a.err
+#SBATCH --array=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30
+
+module purge
+module load ngsLD/2020
+module load Perl/5.34.0-GCCcore-11.2.0-ARC
+
+PATH_PRUNE="/data/zool-zost/sjoh4959/projects/0.0_island_rule/src/others/ngsLD/scripts/prune_graph.pl"
+PATH_INPUT="/data/zool-zost/sjoh4959/projects/0.0_island_rule/data/LD/output/"
+PATH_OUT="/data/zool-zost/sjoh4959/projects/0.0_island_rule/data/LD/output/pruned_sites/"
+MIN_WEIGHT=0.1
+MAX_KB_DIST=5
+
+declare -a chromosome_list=()
+
+chromosome_list+=("chr${SLURM_ARRAY_TASK_ID}")
+
+for chromosome in "${chromosome_list[@]}"
+do
+        perl $PATH_PRUNE --in_file "${PATH_INPUT}${chromosome}.ld" --max_kb_dist $MAX_KB_DIST --min_weight $MIN_WEIGHT --out "${PATH_OUT}${chromosome}_pruned.ld"
+done

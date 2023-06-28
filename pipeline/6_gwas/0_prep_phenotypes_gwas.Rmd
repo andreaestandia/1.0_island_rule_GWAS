@@ -1,0 +1,94 @@
+---
+title: "0.0_prep_phenotypes_gwas"
+author: "Andrea Estandia"
+date: "16/11/2020"
+output:
+  pdf_document: default
+  html_document: 
+    fig_caption: yes
+    toc: yes
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r}
+source("./src/0.0_island_rule_source.R")
+```
+
+Read data
+```{r}
+pheno <-
+  read_csv(file.path(data_path, 
+                     "sample_info/curated_dataset.csv"))
+```
+
+PCA prep for GWAS with a) head, wing, tarsus, tail b) bill measurements
+```{r}
+body_pca <-
+  princomp(~Wing+
+             Tarsus+
+             Tail+
+             HeadLength,
+           data=pheno,
+           scores=TRUE,
+           cor=TRUE,
+           na.action=na.exclude)
+
+colnames(body_pca$scores) <- 
+  c("body_PC1", "body_PC2", "body_PC3", "body_PC4")
+
+bill_pca <-
+  princomp(~Bill_length_posterior+
+             Bill_depth_anterior+
+             Bill_width_anterior,
+           data=pheno,
+           scores=TRUE,
+           cor=TRUE,
+           na.action=na.exclude)
+
+colnames(bill_pca$scores) <- 
+  c("bill_PC1", "bill_PC2", "bill_PC3")
+
+pheno <- 
+  cbind(pheno,body_pca$scores) %>% 
+  cbind(bill_pca$scores)
+
+write.csv(pheno, file.path(data_path, "sample_info/pheno_pca.csv"), row.names = F)
+```
+
+How much of the variance does each loading explain?
+```{r}
+summary(body_pca)
+
+summary(bill_pca)
+```
+
+Generate subsets for sequence removal in BEAGLE file
+```{r}
+trait_list=colnames(pheno)[c(15:21, 33:34, 37:38)]
+
+for (trait in trait_list) {
+  tmp <-
+    pheno %>%
+    dplyr::select(id, trait) %>%
+    drop_na() %>%
+    dplyr::select(id, trait)
+  write_tsv(
+    tmp,
+    file = file.path(
+      date_path,
+      "GWAS",
+      "phenotypes",
+      paste0(as.character(trait), ".tsv")
+    ),
+    col_names = F
+  )
+}
+```

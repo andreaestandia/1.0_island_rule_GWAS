@@ -1,0 +1,566 @@
+---
+title: "3_plot_inversions.Rmd"
+author: "Andrea Estandia"
+date: "31/05/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+params:
+  beagle: 
+  - chr27_959841-chr27_1052666.beagle
+  - chr28_4071701-chr28_4275666.beagle
+  - chr29_1573309-chr29_1664147.beagle
+---
+
+
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Read phenotype file with body size (PC1), pop info and genetic sex
+```{r}
+pheno <-
+  read_tsv(file.path(data_path,
+                     "GWAS",
+                     "phenotypes",
+                     "body_pc1.tsv"),
+           col_names = FALSE) %>%
+  rename(sample_name = X1) %>%
+  rename(body_PC1 = X2)
+
+pop_info <- 
+  read_csv(file.path(data_path,
+                     "sample_info",
+                     "curated_dataset.csv")) %>%
+  rename(x = sample_name) %>%
+  rename(sample_name = id) %>%
+  select(sample_name, pop, region, latitude, longitude)
+
+geneticsex <-
+  read_csv(file.path(data_path, 
+                     paste0("sample_info",
+                            "geneticsex.csv"))) %>%
+  rename(id = Blood_Number)
+```
+
+Read results local PCA
+```{r}
+mds_scores <-
+  read.csv(file.path(reports_path,
+                   "localPCA",
+                   "localPCA.csv"),
+             header = T)
+```
+
+Specify parameters for Fig 4
+```{r}
+max_MDS <- 2
+sd_lim <- 4
+x_between <- 10 
+min_n_window <- 5
+unique_lg <- unique(mds_scores$LG)
+```
+
+Plot Figure 4
+```{r}
+MDS_CLUSTER_ALL <- matrix(ncol = 10)
+colnames(MDS_CLUSTER_ALL) <-
+  c(
+    "LG",
+    "start",
+    "stop",
+    "x",
+    "window_start",
+    "window_stop",
+    "n_windows",
+    "mds",
+    "mds_num",
+    "cluster"
+  )
+
+order_chr <- as.character(seq(from = 5, to = 30))
+reference = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z")
+ref = factor(as.factor(reference), levels = c(c("1", "1A", "2", "3", "4", "4A"), order_chr, "Z"))
+mds_scores <- mds_scores[order(factor(as.factor(mds_scores$LG), levels = ref)),]
+mds_scores$n <- 1:nrow(mds_scores)
+
+axisdf <-
+  mds_scores %>%
+  group_by(LG) %>%
+  summarize(center = (max(n) + min(n)) / 2)
+
+plot_mds <- function(mds_vector, color_values) {
+  mds_mean <- mean(mds_vector)
+  mds_sd <- sd(mds_vector)
+  
+  plot <- mds_scores %>%
+    ggplot(aes(x = n, y = mds_vector, color = LG)) +
+    geom_point() +
+    scale_x_continuous(
+      label = axisdf$LG,
+      breaks = axisdf$center,
+      expand = c(0.01, 0.01)
+    ) +
+    scale_color_manual(values = color_values) +
+    geom_hline(yintercept = mds_mean + sd_lim * mds_sd, linetype = "dashed") +
+    geom_hline(yintercept = mds_mean - sd_lim * mds_sd, linetype = "dashed") +
+    theme_classic() +
+    theme(
+      text = element_text(size = 12),
+      legend.position = "none",
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      panel.border = element_blank()
+    )
+  
+  return(plot)
+}
+
+mds_vector1 <- mds_scores[, "PC1"]
+color_values1 <- rep(c("#8fc7c0", "#2a9d8f"), length(unique_lg))
+plot_mds1 <- plot_mds(mds_vector1, color_values1)
+
+mds_vector2 <- mds_scores[, "X2"]
+color_values2 <- rep(c("#eddd9a", "#d19f28"), length(unique_lg))
+plot_mds2 <- plot_mds(mds_vector2, color_values2)
+```
+
+Function to create individual MDS plots
+```{r}
+j=2
+plot_mds <- list()
+mds_col <- 6 + j
+mds_vector <- mds_scores[, mds_col]
+mds_mean <- mean(mds_vector)
+mds_sd <- sd(mds_vector)
+
+create_mds_plot <- function(dataset, chr) {
+  mds_scores_chr <- dataset %>% 
+    filter(LG == chr)
+  
+  if (chr == "chr4A") {
+    mds_col <- 5 + j
+  } else {
+    mds_col <- 6 + j
+  }
+  mds_vector_chr <- mds_scores_chr[, mds_col]
+  
+  # calculate limit
+  # plot
+  if (chr == "chr4A") {
+    color_value <- "#2a9d8f"  # Set color to "#2a9d8f" for input "chr4A"
+  } else {
+    color_value <- "#e9c46a"  # Set the initial color for other inputs
+  }
+  
+  plot_mds_chr <- mds_scores_chr %>%
+    ggplot(aes(x = n, y = mds_vector_chr, color = LG)) +
+    geom_point() +
+    scale_x_continuous(
+      label = axisdf$LG,
+      breaks = axisdf$center,
+      expand = c(0.01, 0.01)
+    ) +
+    scale_color_manual(values = color_value) +
+    geom_hline(yintercept = mds_mean + sd_lim * mds_sd,
+               linetype = "dashed") +
+    geom_hline(yintercept = mds_mean - sd_lim * mds_sd,
+               linetype = "dashed") +
+    theme_classic() +
+    theme(
+      text = element_text(size = 12),
+      legend.position = "none",
+      panel.border = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.text.x.bottom = element_blank()) +
+    labs(
+      x = paste0("\n", as.character(chr), "\n"),
+      y = "MDS2"
+    )
+  return(plot_mds_chr)
+}
+```
+
+Plot individual chromosomes
+```{r}
+list_chr <- c("chr4A", "chr27","chr28","chr29", "chr30")
+plot_mds_complete <- list()
+for (chr in list_chr) {
+  plot_mds_complete[[chr]] <- create_mds_plot(mds_scores, as.character(chr))
+}
+  
+outlier_mds_plots <- wrap_plots(plot_mds_complete)
+```
+
+
+Now we'll iterate through the parameteres (3 putative inversions) and make Fig. 4B
+```{r}
+for (par in params$beagle) {
+  beagle_file <- file.path(
+  reports_path,
+    "localPCA",
+    "beagle_by_window",
+    par)
+
+if (!file.exists(beagle_file)) {
+gunzip(paste0(beagle_file, ".gz"), remove=FALSE)
+}
+  
+  outlier <- 
+  read.table(
+    file.path(
+      reports_path,
+      "localPCA",
+      "beagle_by_window",
+      par
+    ),
+    header = T
+  ) %>%
+  select(-c("allele1", "allele2")) %>%
+  as_tibble() %>%
+  pivot_longer(starts_with("Ind")) %>%
+  rename(sample_name = name) %>%
+  rename(genotype = value) %>%
+  mutate(sample_name = str_remove(sample_name, "\\.[^.]*$"))
+  
+  geno <-
+  rep(c("AA", "AB", "BB"),
+      times = length(outlier$sample_name) / 3)
+
+df <- 
+  cbind(outlier, geno)
+
+df <- df %>% 
+  filter(genotype>0.34) %>% 
+  group_by(sample_name, marker) %>% 
+  top_n(1, genotype)
+
+df2 <- 
+  df %>% 
+  left_join(pop_info, by = "sample_name") %>% 
+  left_join(pheno, by = "sample_name") %>% 
+  separate(marker,into = c("chr", "position")) %>% 
+  mutate(position=as.numeric(position)) %>% 
+  unite("marker", chr:position, remove=FALSE)
+
+label <- 
+  read.table(file.path(data_path,"localPCA/pop_label"))
+
+cov_mat <-
+  as.matrix(read.table(file.path(
+    reports_path,
+      "localPCA",
+      "cov_by_window",
+      paste0(gsub("\\..*","",par), ".cov")
+  )))
+
+mds.cor <- (1 - cov_mat) %>%
+  cmdscale(k=3, eig = TRUE)
+
+colnames(mds.cor$points) <- c("Dim.1", "Dim.2", "Dim.3")
+rownames(mds.cor$points) <-
+  label$V3
+
+kmeans_res<-
+  kmeans(as.matrix(mds.cor$points[,1]), 
+                   c(min(mds.cor$points[,1]), 
+                     median(mds.cor$points[,1]), 
+                     max(mds.cor$points[,1])))
+k_ss<-
+  round(kmeans_res$betweenss/kmeans_res$totss,3)
+
+k <- as.data.frame(kmeans_res$cluster)
+colnames(k) <- "k"
+
+clusters <- 
+  label %>%
+  select(-V3, -V4) %>% 
+  cbind(mds.cor$points) %>% 
+  cbind(k) %>% 
+  rename(id=V1) %>% 
+  rename(sample_name=V2) %>% 
+  rename(subregion=V5) %>%
+  left_join(geneticsex, by="id") %>% 
+  left_join(df2, by="sample_name")
+
+df_name <- paste0("clusters_", paste0(gsub("\\_.*","",par)))
+assign(df_name, clusters)
+
+mds_plot <- 
+  clusters %>% 
+  filter(genotype>0.34) %>%
+  distinct(id, .keep_all = T) %>% 
+  ggplot(aes(y=Dim.2, x=Dim.1, col=as.factor(k)))+
+  geom_point()+
+  theme_minimal() +
+  scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.position = "none",
+    legend.text = element_text(size=11),
+    legend.title = element_text())+
+  labs(x="\nMDS1", y="MDS2\n", 
+       title=paste0(gsub("\\_.*","",par), "\n"))
+
+#Add name for specific chromosome 
+plot_name <- paste0("mds_plot_", paste0(gsub("\\_.*","",par)))
+assign(plot_name, mds_plot)
+
+bodysize_plot <- 
+  clusters %>% 
+  drop_na(body_PC1) %>% 
+  filter(genotype>0.34) %>%
+  distinct(id, .keep_all = T) %>% 
+  ggplot(aes(y=body_PC1, x=as.factor(k), col=body_PC1))+
+  geom_violin(trim = FALSE) +
+  stat_summary(
+    aes(group = geno),
+    geom = "pointrange",
+    fun.data = mean_cl_normal,
+    fun.args=list(conf.int=0.89),
+    size = 1)+
+  geom_jitter(width = 0.05,
+              height = 0.05,
+              alpha = 0.8,
+              size=2) +
+  theme_minimal() +
+  scale_color_viridis_c()+
+  #scale_color_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))+
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    axis.text.x = element_text(hjust=1, size=text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    #legend.position = "none",
+    legend.text = element_text(size=11),
+    legend.title = element_text())+
+  labs(x="\nCluster", y="Body size (PC1)\n", 
+       title=paste0(gsub("\\_.*","",par), "\n"))
+
+plot_name <- paste0("bodysize_plot_", paste0(gsub("\\_.*","",par)))
+assign(plot_name, bodysize_plot)
+
+df_name <- paste0("n_het_", paste0(gsub("\\_.*","",par)))
+assign(df_name, het_n)
+
+df <-
+  clusters %>% 
+  group_by(pop, geno, k, region) %>% 
+  summarise(n=n())
+
+summary_alleles_cluster <- df %>%
+  group_by(pop, geno, k) %>%
+  summarise(total_n = sum(n)) %>%
+  pivot_wider(names_from = k, values_from = total_n) %>%
+  summarise(percentage_cluster1 = sum(`1`, na.rm = TRUE) / sum(`1`, `2`, `3`, na.rm = TRUE),
+            percentage_cluster2 = sum(`2`, na.rm = TRUE) / sum(`1`, `2`, `3`, na.rm = TRUE),
+            percentage_cluster3 = sum(`3`, na.rm = TRUE) / sum(`1`, `2`, `3`, na.rm = TRUE))
+
+
+df_map <- summary_alleles_cluster %>%
+  left_join(pop_info, by = "pop") %>%
+  select(-sample_name) %>% 
+  distinct(pop, .keep_all=TRUE)
+
+df_map[is.na(df_map)] <- 0
+
+oceania <-
+  rnaturalearth::ne_countries(scale = "large",
+               returnclass = "sf",
+               continent = "oceania")
+
+anzo <- ggplot(data = oceania) +
+    geom_sf(fill = "darkgrey", color = NA) +
+    coord_sf(xlim = c(140, 187),
+             ylim = c(-50,-12),
+             expand = FALSE) +
+    theme(
+      text=element_text(),
+      panel.background = element_rect(fill = background_colour),
+      panel.border = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.ticks = element_blank(),
+       legend.position = "none",
+      plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"))+
+    geom_scatterpie(aes(x=longitude+0.5, y=latitude+0.5, group = pop, r = 1), 
+                    data = df_map, cols=c("percentage_cluster1", 
+                                          "percentage_cluster2", 
+                                          "percentage_cluster3"), color=NA) + 
+    scale_fill_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))
+
+van_sm <- ggplot(data = oceania) +
+    geom_sf(fill = "darkgrey", color = NA) +
+    coord_sf(xlim = c(160, 172),
+             ylim = c(-25,-12),
+             expand = FALSE) +
+    theme(
+      text=element_text(),
+      panel.background = element_rect(fill = background_colour),
+      panel.border = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.position = "none",
+      plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"))+
+    geom_scatterpie(aes(x=longitude+0.5, y=latitude+0.5, group = pop, r = 0.3),
+                    data = df_map, cols=c("percentage_cluster1",
+                                          "percentage_cluster2",
+                                          "percentage_cluster3"), color=NA) +
+    scale_fill_manual(values = c("#264653", "#2a9d8f", "#e9c46a"))
+
+chartpie <- 
+  anzo+van_sm+plot_layout(guides="collect")
+
+chartpie
+
+plot_name <- paste0("chartpie_plot_", paste0(gsub("\\_.*","",par)))
+assign(plot_name, chartpie)
+}
+```
+
+Only run if chr4A. Decompose matrix and plot neo sex chromosome.
+```{r}
+beagle_file <- file.path(
+  reports_path,
+  "localPCA",
+  "beagle_by_window",
+  "chr4A_1257754-chr4A_1261375.beagle"
+)
+
+if (!file.exists(beagle_file)) {
+  gunzip(paste0(beagle_file, ".gz"), remove = FALSE)
+}
+
+outlier <-
+  read.table(
+    file.path(
+      reports_path,
+      "localPCA",
+      "beagle_by_window",
+      "chr4A_1257754-chr4A_1261375.beagle"
+    ),
+    header = T
+  ) %>%
+  select(-c("allele1", "allele2")) %>%
+  as_tibble() %>%
+  pivot_longer(starts_with("Ind")) %>%
+  rename(sample_name = name) %>%
+  rename(genotype = value) %>%
+  mutate(sample_name = str_remove(sample_name, "\\.[^.]*$"))
+
+geno <-
+  rep(c("AA", "AB", "BB"),
+      times = length(outlier$sample_name) / 3)
+
+df <-
+  cbind(outlier, geno)
+
+df <- df %>%
+  filter(genotype > 0.34) %>%
+  group_by(sample_name, marker) %>%
+  top_n(1, genotype)
+
+df2 <-
+  df %>%
+  left_join(pop_info, by = "sample_name") %>%
+  left_join(pheno, by = "sample_name") %>%
+  separate(marker, into = c("chr", "position")) %>%
+  mutate(position = as.numeric(position)) %>%
+  unite("marker", chr:position, remove = FALSE)
+
+label <-
+  read.table(file.path(data_path, "localPCA/pop_label"))
+
+cov_mat <-
+  as.matrix(read.table(
+    file.path(
+      reports_path,
+      "localPCA",
+      "cov_by_window",
+      paste0(
+        gsub("\\..*", "", "chr4A_1257754-chr4A_1261375.beagle"),
+        ".cov"
+      )
+    )
+  ))
+
+#Do MDS on cov matrix
+mds.cor <- (1 - cov_mat) %>%
+  cmdscale(k = 2, eig = TRUE)
+
+colnames(mds.cor$points) <- c("Dim.1", "Dim.2")
+rownames(mds.cor$points) <-
+  label$V3
+
+kmeans_res <-
+  kmeans(as.matrix(mds.cor$points[, 1]),
+         c(
+           min(mds.cor$points[, 1]),
+           max(mds.cor$points[, 1])
+         ))
+k_ss <-
+  round(kmeans_res$betweenss / kmeans_res$totss, 3)
+
+k <- as.data.frame(kmeans_res$cluster)
+colnames(k) <- "k"
+
+clusters_neosex <-
+  label %>%
+  select(-V3,-V4) %>%
+  cbind(mds.cor$points) %>%
+  cbind(k) %>%
+  rename(id = V1) %>%
+  rename(sample_name = V2) %>%
+  rename(subregion = V5) %>%
+  left_join(geneticsex, by = "id") %>%
+  left_join(df2, by = "sample_name")
+
+mds_neosex <-
+  clusters_neosex %>%
+  filter(GeneticSex != "NA") %>%
+  distinct(id, .keep_all = T) %>%
+  ggplot(aes(
+    x = Dim.1,
+    y = Dim.2,
+    col = as.factor(GeneticSex)
+  )) +
+  geom_point() +
+  theme_minimal() +
+  scale_color_manual(values = c("#264653", "#e76f51")) +
+  theme(
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(hjust = 1, size = text_size),
+    axis.text.y = element_text(size = text_size),
+    axis.title = element_text(size = text_size),
+    legend.position = "right",
+    legend.text = element_text(size = 11),
+    legend.title = element_text()
+  ) +
+  labs(x = "\nMDS1", y = "MDS2\n") +
+  guides(color = guide_legend(title = "Cluster"))
+```

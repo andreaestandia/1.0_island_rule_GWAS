@@ -1,0 +1,135 @@
+---
+title: "1_mds.Rmd"
+author: "Andrea Estandia"
+date: "16/03/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+  
+```{r setup, echo=FALSE}
+# Knitr settings: 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE}
+source("./src/0.0_island_rule_source.R")
+```
+
+Specify parameters
+```{r pressure, echo=FALSE}
+window_size=100
+N_ind=377
+N_PC=2
+N_MDS=20
+```
+
+Sections of this function come from Claire Merot's code available at:
+https://github.com/clairemerot/angsd_pipeline
+```{r}
+mds_by_chr <- function(chr) {
+  window <- read.table(
+    file.path(
+      reports_path,
+      "localPCA",
+      "analyse_by_window",
+      "list_window_",
+      chr,
+      ".txt"
+    ),
+    header = F
+  )
+  
+  colnames(window) <- "file_name"
+  
+  window$LG <- vector(length = dim(window)[1])
+  window$pos <- vector(length = dim(window)[1])
+  window$n_snp <- vector(length = dim(window)[1])
+  window$start <- vector(length = dim(window)[1])
+  window$stop <- vector(length = dim(window)[1])
+  
+  window_order <- window[order(window$LG, window$start), ]
+  head(window_order)
+  
+  for (i in 1:dim(window)[1])
+  {
+    window$LG[i] <-
+      unlist(strsplit(as.character(window$file_name[i]), split = "_"))[2]
+    window$pos[i] <-
+      unlist(strsplit(as.character(window$file_name[i]), split = "_"))[3]
+    window$n_snp[i] <-
+      as.numeric(unlist(strsplit(
+        as.character(window$file_name[i]), split = "_"
+      ))[4])
+    window$start[i] <-
+      as.numeric(unlist(strsplit(as.character(window$pos[i]), split = "-"))[1])
+    window$stop[i] <-
+      as.numeric(unlist(strsplit(as.character(window$pos[i]), split = "-"))[2])
+  }
+  #re-order the window correctly
+  window_order <- window[order(window$LG, window$start), ]
+  head(window_order)
+  
+  ####work on all LG to run lostruct
+  #prepare an empty matrix with nrow= nb of window, and ncol= sumofsquares + 
+  #nb of eigen value + dim of all eigen vectors (Nb individuals * N_Pc)
+  window_eigs <-
+    matrix(nrow = dim(window_order)[1], ncol = (1 + N_PC + (N_ind * N_PC)))
+  
+  #import each covariance matrix and make the eigen decomposition
+  for (i in 1:dim(window_order)[1])
+  {
+    print(paste("import covariance matrix for window and get eigenvectors", i))
+    window_covmats_i <- as.matrix(read.table(
+      file.path(
+        reports_path,
+        "localPCA",
+        "cov_by_window",
+        chr,
+        "/",
+        window_order$file_name[i]
+      )
+    ))
+    window_eigs [i, ] <- cov_pca(k = N_PC, covmat = window_covmats_i)
+  }
+  
+  
+  print(paste("calculating distance between window PCA with NPC=", N_PC))
+  window_dist <- pc_dist(window_eigs, npc = N_PC)
+  
+  #run a MDS to visualise the distribution of window
+  print(paste("run MDS on distance matrix and will keep N_MDS=", N_MDS))
+  mds_axe <- cmdscale(window_dist, eig = TRUE, k = N_MDS)
+  window_order_mds <- cbind(window_order, mds_axe$points)
+  
+  window_order_mds <- window_order_mds %>% rename("PC1" = "1")
+  window_order_mds$n <- 1:nrow(window_order_mds)
+  window_order_mds
+}
+```
+
+Create vector with name of chromosomes and iterate through it, then write a table with results
+```{r}
+chromosome_list <- c(paste0("chr", seq(from=1, to=30)), 
+                     "chr4A", 
+                     "chr1A", 
+                     "chrZ")
+
+
+datalist = list()
+for (chromo in chromosome_list) {
+	datalist[[as.character(chromo)]] <- mds_by_chr(chromo)
+}
+
+big_data <- 
+	do.call(rbind, datalist)
+
+write.csv(big_data, 
+         file.path(reports_path,
+                   "localPCA",
+                   "localPCA.csv", 
+                   row.names=F))
+
+```
