@@ -64,4 +64,6 @@ You can see the folder structure below
 
 Raw data, intermediate files and final output will be uploaded to Figshare and a link will be made available soon.
 
+Much of the code developed to do the local PCA was inspired by Claire Merot's work. Check her pipeline here: https://github.com/clairemerot/angsd_pipeline
+
 Feel free to drop me an email (andrea.estandia@biology.ox.ac.uk) if you have any questions.	
